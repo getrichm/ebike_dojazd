@@ -9,117 +9,162 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#1E2A22">
+<meta name="theme-color" content="#101A14">
 <meta name="description" content="Výpočet priebehu kapacity batérie a dojazdu e-biku z GPX stopy.">
 <style>
   :root{
-    --sheet:#E4E7DE; --sheet-2:#EDEFE8;
-    --ink:#1E2A22; --ink-soft:#5A6A5E;
-    --contour:#A8956F; --contour-soft:#C7B894;
-    --charge:#2D6E4E; --drain:#B03A2E; --water:#3F7595; --rule:#C3C9BB;
+    --sheet:#EFF1E9; --sheet-2:#F8F9F4;
+    --ink:#101A14; --ink-soft:#39473E;
+    --contour:#8A7647; --contour-soft:#D2C39C;
+    --charge:#1C5B37; --drain:#9C2418; --water:#2A5F82; --rule:#9BA595;
+    --crit:#9C2418; --crit-bg:rgba(156,36,24,.13);
     --font-map:'Avenir Next Condensed','HelveticaNeue-CondensedBold','Helvetica Neue Condensed','Arial Narrow',system-ui,sans-serif;
     --font-data:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
     --font-body:-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',Roboto,sans-serif;
   }
+  /* režim na priame slnko — maximálny kontrast, hrubšie písmo */
+  html[data-sun="1"]{
+    --sheet:#FFFFFF; --sheet-2:#FFFFFF;
+    --ink:#000000; --ink-soft:#1F2A23;
+    --contour:#6B5A31; --contour-soft:#E0D6B8;
+    --charge:#0B4A28; --drain:#8A1005; --water:#134766; --rule:#6E7A6B;
+    --crit:#8A1005; --crit-bg:rgba(138,16,5,.16);
+  }
+  html[data-sun="1"] body{font-weight:600}
+  html[data-sun="1"] .note,html[data-sun="1"] .hint,html[data-sun="1"] label,
+  html[data-sun="1"] .sub,html[data-sun="1"] footer{color:var(--ink)}
+
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%}
   body{
     margin:0; background:var(--sheet);
-    color:var(--ink); font-family:var(--font-body); font-size:15px; line-height:1.5;
-    -webkit-tap-highlight-color:rgba(45,110,78,.18);
+    color:var(--ink); font-family:var(--font-body); font-size:17px; font-weight:500; line-height:1.55;
+    -webkit-tap-highlight-color:rgba(28,91,55,.18);
   }
   .wrap{max-width:1180px;margin:0 auto;
-    padding:calc(24px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-left)) 72px}
-  header{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:24px}
-  .eyebrow{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.22em;font-size:12px;color:var(--ink-soft);margin:0 0 6px}
-  h1{font-family:var(--font-map);font-weight:700;font-size:clamp(24px,5.2vw,40px);text-transform:uppercase;letter-spacing:.03em;margin:0;line-height:1}
-  .sub{margin:8px 0 0;color:var(--ink-soft);max-width:60ch;font-size:14px;text-align:justify}
+    padding:calc(20px + env(safe-area-inset-top)) max(14px,env(safe-area-inset-left)) 72px}
+  header{border-bottom:3px solid var(--ink);padding-bottom:14px;margin-bottom:22px}
+  .head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .eyebrow{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.2em;font-size:13px;
+    font-weight:700;color:var(--ink-soft);margin:0 0 6px}
+  h1{font-family:var(--font-map);font-weight:800;font-size:clamp(27px,6.2vw,42px);text-transform:uppercase;
+    letter-spacing:.02em;margin:0;line-height:1.02}
+  .sub{margin:10px 0 0;color:var(--ink-soft);max-width:62ch;font-size:15.5px;
+    text-align:justify;text-justify:inter-word;
+    -webkit-hyphens:auto;hyphens:auto;overflow-wrap:break-word}
+  .sun{flex:0 0 auto;background:var(--ink);color:var(--sheet);border:2px solid var(--ink);
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:12.5px;font-weight:700;
+    padding:8px 12px;cursor:pointer;min-height:44px;white-space:nowrap}
+  html[data-sun="1"] .sun{background:var(--sheet);color:var(--ink)}
 
-  .grid{display:grid;grid-template-columns:330px minmax(0,1fr);gap:24px;align-items:start}
+  .grid{display:grid;grid-template-columns:350px minmax(0,1fr);gap:24px;align-items:start}
   @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
 
-  .legend{background:var(--sheet-2);border:1px solid var(--ink);box-shadow:4px 4px 0 rgba(30,42,34,.14)}
-  .legend h2{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.16em;font-size:12px;
-    margin:0;padding:9px 14px;border-bottom:1px solid var(--ink);background:var(--ink);color:var(--sheet-2);
+  .legend{background:var(--sheet-2);border:2px solid var(--ink);box-shadow:5px 5px 0 rgba(16,26,20,.2)}
+  .legend h2{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.14em;font-size:14px;
+    margin:0;padding:11px 14px;border-bottom:2px solid var(--ink);background:var(--ink);color:#fff;
     display:flex;justify-content:space-between;align-items:center;gap:10px}
-  .reset{background:none;border:1px solid rgba(237,239,232,.5);color:var(--sheet-2);
-    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;
-    padding:4px 9px;cursor:pointer;min-height:26px}
-  .reset:hover{background:var(--sheet-2);color:var(--ink)}
-  .sect{padding:14px;border-bottom:1px dashed var(--rule)}
+  .reset{background:none;border:2px solid rgba(255,255,255,.7);color:#fff;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:700;
+    padding:6px 10px;cursor:pointer;min-height:34px}
+  .reset:hover{background:#fff;color:var(--ink)}
+  .sect{padding:15px 14px;border-bottom:2px dashed var(--rule)}
   .sect:last-child{border-bottom:0}
-  .sect>h3{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.15em;font-size:11px;color:var(--ink-soft);margin:0 0 10px}
-  label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 3px}
-  .row{display:flex;gap:9px;margin-bottom:10px}
+  .sect>h3{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.13em;font-size:14px;
+    font-weight:800;color:var(--ink);margin:0 0 11px}
+  label{display:block;font-size:14px;font-weight:700;color:var(--ink);margin:0 0 4px}
+  .row{display:flex;gap:9px;margin-bottom:12px}
   .row>*{flex:1;min-width:0}
   input,select,button{font-family:var(--font-data);color:var(--ink)}
   input[type=number],input[type=text],select{
-    width:100%;padding:8px 9px;background:#fff;border:1px solid var(--rule);border-radius:0;
-    font-size:16px; -webkit-appearance:none;appearance:none}
-  select{font-family:var(--font-body);font-size:16px;
-    background-image:linear-gradient(45deg,transparent 50%,var(--ink-soft) 50%),linear-gradient(135deg,var(--ink-soft) 50%,transparent 50%);
-    background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:28px}
-  input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--water);outline-offset:1px}
+    width:100%;padding:11px 10px;background:#fff;border:2px solid var(--ink);border-radius:0;
+    font-size:17px;font-weight:700; -webkit-appearance:none;appearance:none}
+  select{font-family:var(--font-body);font-size:17px;font-weight:600;
+    background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);
+    background-position:calc(100% - 16px) 54%,calc(100% - 10px) 54%;background-size:7px 7px,7px 7px;background-repeat:no-repeat;padding-right:32px}
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--water);outline-offset:1px}
 
-  .drop{border:2px dashed var(--contour);background:rgba(199,184,148,.14);padding:20px 14px;text-align:center;cursor:pointer;transition:background .15s}
-  .drop:hover,.drop.over{background:rgba(199,184,148,.32)}
-  .drop strong{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:13.5px;display:block}
-  .drop span{font-size:12px;color:var(--ink-soft)}
+  .drop{border:3px dashed var(--contour);background:rgba(210,195,156,.22);padding:22px 14px;text-align:center;cursor:pointer;transition:background .15s}
+  .drop:hover,.drop.over{background:rgba(210,195,156,.42)}
+  .drop strong{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:16px;display:block}
+  .drop span{font-size:14px;color:var(--ink-soft)}
 
-  .pt{display:grid;gap:7px;margin-bottom:7px;align-items:center}
-  .pt.c2{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px}
-  .pt.c3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 34px}
-  .pt button{background:none;border:1px solid var(--rule);cursor:pointer;color:var(--drain);font-size:17px;line-height:1;min-height:38px}
-  .pt button:hover{background:var(--drain);color:#fff;border-color:var(--drain)}
-  .add{width:100%;background:none;border:1px dashed var(--contour);padding:9px;cursor:pointer;
-    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:11.5px;color:var(--ink-soft);min-height:38px}
-  .add:hover{background:rgba(199,184,148,.3)}
-  .go{width:100%;background:var(--ink);color:var(--sheet);border:0;padding:15px;cursor:pointer;
-    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.18em;font-size:15px;min-height:48px}
+  .pt{display:grid;gap:8px;margin-bottom:8px;align-items:center}
+  .pt.c2{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px}
+  .pt.c3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 44px}
+  .pt button{background:none;border:2px solid var(--drain);cursor:pointer;color:var(--drain);
+    font-size:20px;font-weight:700;line-height:1;min-height:46px}
+  .pt button:hover{background:var(--drain);color:#fff}
+  .add{width:100%;background:none;border:2px dashed var(--contour);padding:11px;cursor:pointer;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:13.5px;font-weight:700;
+    color:var(--ink);min-height:46px}
+  .add:hover{background:rgba(210,195,156,.4)}
+  .go{width:100%;background:var(--ink);color:#fff;border:0;padding:17px;cursor:pointer;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.16em;font-size:18px;font-weight:800;min-height:56px}
   .go:hover{background:var(--charge)}
-  .go:disabled{background:var(--rule);color:var(--ink-soft);cursor:not-allowed}
+  .go:disabled{background:var(--rule);color:#fff;cursor:not-allowed}
 
-  .empty{border:1px dashed var(--contour);padding:48px 22px;text-align:center;color:var(--ink-soft);background:rgba(237,239,232,.6)}
-  .empty p{margin:0;max-width:44ch;display:inline-block}
-  figure{margin:0 0 20px;background:var(--sheet-2);border:1px solid var(--ink);box-shadow:4px 4px 0 rgba(30,42,34,.14)}
-  figcaption{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.16em;font-size:12px;
-    padding:9px 14px;border-bottom:1px solid var(--ink);background:var(--ink);color:var(--sheet-2);
+  .empty{border:2px dashed var(--contour);padding:44px 20px;text-align:center;color:var(--ink);background:var(--sheet-2);font-size:16px}
+  .empty p{margin:0;max-width:46ch;display:inline-block}
+  figure{margin:0 0 20px;background:var(--sheet-2);border:2px solid var(--ink);box-shadow:5px 5px 0 rgba(16,26,20,.2)}
+  figcaption{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:14px;font-weight:700;
+    padding:11px 14px;border-bottom:2px solid var(--ink);background:var(--ink);color:#fff;
     display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
-  figcaption em{font-style:normal;opacity:.72;letter-spacing:.1em}
+  figcaption em{font-style:normal;opacity:.85;letter-spacing:.06em}
   svg.chart{display:block;width:100%;height:auto}
 
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));border:1px solid var(--ink);margin-bottom:20px;background:var(--sheet-2)}
-  .stat{padding:11px 13px;border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
-  .stat .k{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.14em;font-size:10.5px;color:var(--ink-soft)}
-  .stat .v{font-family:var(--font-data);font-size:21px;margin-top:2px}
-  .stat .v small{font-size:12px;color:var(--ink-soft)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:2px solid var(--ink);margin-bottom:20px;background:var(--sheet-2)}
+  .stat{padding:12px 14px;border-right:2px solid var(--rule);border-bottom:2px solid var(--rule)}
+  .stat .k{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.11em;font-size:12.5px;font-weight:700;color:var(--ink-soft)}
+  .stat .v{font-family:var(--font-data);font-size:26px;font-weight:700;margin-top:3px;line-height:1.15}
+  .stat .v small{font-size:14px;font-weight:700;color:var(--ink-soft)}
+  .stat.danger{background:var(--crit-bg)}
+  .stat.danger .v,.stat.danger .k{color:var(--crit)}
 
-  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;border:1px solid var(--ink)}
-  table{width:100%;border-collapse:collapse;background:var(--sheet-2);font-family:var(--font-data);font-size:13px}
-  caption{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.16em;font-size:12px;text-align:left;padding:9px 14px;background:var(--ink);color:var(--sheet-2)}
-  th,td{padding:6px 12px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;border:2px solid var(--ink)}
+  table{width:100%;border-collapse:collapse;background:var(--sheet-2);font-family:var(--font-data);font-size:15px;font-weight:600}
+  caption{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:14px;font-weight:700;
+    text-align:left;padding:11px 14px;background:var(--ink);color:#fff}
+  th,td{padding:9px 13px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
   th:first-child,td:first-child{text-align:left}
-  th{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:11px;color:var(--ink-soft);font-weight:400}
+  th{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.08em;font-size:13px;color:var(--ink);font-weight:800}
   tbody tr:last-child td{border-bottom:0}
-  td.warn{color:var(--drain)}
-  .note{font-size:13.5px;color:var(--ink-soft);border-left:3px solid var(--contour);padding:2px 0 2px 13px;margin:0 0 15px;max-width:70ch}
-  .err{border-left-color:var(--drain);color:var(--drain)}
-  .hint{font-size:12px;color:var(--ink-soft);margin:-4px 0 10px;line-height:1.4}
-  footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-soft);max-width:74ch}
+  td.warn{color:var(--drain);font-weight:800}
+  tr.crit td{background:var(--crit-bg);color:var(--crit);font-weight:800}
+  tr.dead td{background:var(--crit-bg);color:var(--crit);font-weight:800;text-decoration-color:var(--crit)}
+  .note{font-size:15.5px;color:var(--ink);border-left:5px solid var(--contour);padding:4px 0 4px 14px;margin:0 0 15px;max-width:72ch}
+  .err{border-left-color:var(--drain);color:var(--drain);font-weight:700}
+  .crit-note{border-left-color:var(--crit);background:var(--crit-bg);padding:9px 12px 9px 14px;color:var(--crit);font-weight:700}
+  .hint{font-size:14px;color:var(--ink-soft);margin:-4px 0 12px;line-height:1.45}
+  a{color:var(--water);text-decoration:underline;text-underline-offset:3px;
+    text-decoration-thickness:2px;font-weight:700}
+  a:hover{color:var(--charge)}
+  html[data-sun="1"] a{color:var(--ink);text-decoration-thickness:3px}
+  .feedback{margin:14px 0 0;padding-top:12px;border-top:2px solid var(--rule);
+    font-size:16px;font-weight:700;color:var(--ink)}
+  footer{margin-top:40px;padding-top:14px;border-top:2px solid var(--rule);font-size:14.5px;color:var(--ink-soft);max-width:74ch}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
 <div class="wrap">
 <header>
-  <p class="eyebrow">Výpočet z GPX stopy</p>
-  <h1>Pravdepodobný vývoj výkonu batérie</h1>
+  <div class="head-top">
+    <div>
+      <p class="eyebrow">Výpočet z GPX stopy</p>
+      <h1>Pravdepodobný vývoj výkonu batérie</h1>
+    </div>
+    <button type="button" class="sun" id="sunBtn" aria-pressed="false">☀ Na slnko</button>
+  </div>
   <p class="sub">Tento nástroj slúži na približné určenie výkonu batérie tvojho e-biku a dojazdu
-  v ľubovoľnom bode trasy. Naplánuj si trasu napríklad na mapy.com a vyexportuj *.gpx.</p>
+  v ľubovoľnom bode trasy. Naplánuj si trasu napríklad na <a href="https://mapy.com" target="_blank" rel="noopener">mapy.com</a> a vyexportuj *.gpx.</p>
   <p class="sub">Nahraj súbor GPX, doplň tvoje potrebné parametre a zvoľ VYPOČÍTAŤ. Výsledkom je
   priebeh zostatku batérie po celej trase a bod, kde kapacita batérie dosiahne 0 %.</p>
   <p class="sub">V priebehu jazdy umožňuje aj priebežné výpočty — keď zadáš údaje z jazdy, výsledok
   sa bude optimalizovať. Prípadne je možné doplniť aj priebežné dobitie batérie, čo sa samozrejme
   odrazí na predĺžení celkového dojazdu.</p>
+  <p class="sub">Posledné percentá kapacity sú kritické pásmo: zobrazovač už neukazuje jednotky, ale
+  skočí z 10 % na 5 % a potom na 0 %, motor uberá výkon a odhad dojazdu prestáva platiť. Model preto
+  osobitne vyznačí kilometer, na ktorom batéria klesne do rezervy.</p>
   <p class="sub">Pri dostatočných údajoch z jazdy pracuje tento model s chybou do 10 %.</p>
 </header>
 
@@ -171,6 +216,13 @@
         <div><label for="volt">Napätie [V]</label><input type="number" id="volt" value="36" step="1" inputmode="decimal"></div>
         <div><label for="eta">Účinnosť pohonu</label><input type="number" id="eta" value="0.78" step="0.01" min="0.5" max="1" inputmode="decimal"></div>
       </div>
+      <div class="row">
+        <div><label for="socCrit">Rezerva [%]</label><input type="number" id="socCrit" value="10" step="1" min="0" max="40" inputmode="decimal"></div>
+        <div><label for="socDead">Kritická hodnota [%]</label><input type="number" id="socDead" value="5" step="1" min="0" max="20" inputmode="decimal"></div>
+      </div>
+      <p class="hint">Pod rezervou (10 %) zobrazovač už nemeria po jednotkách — skočí na 5 % a potom
+      na 0 %. Kritická hodnota 5 % je posledný použiteľný stav: model ju berie ako praktickú nulu,
+      pretože pod ňou riadiaca jednotka uberá výkon a zvyšok kapacity sa spoľahnúť nedá.</p>
     </div>
 
     <div class="sect">
@@ -257,6 +309,10 @@
   Model počíta mechanickú prácu zo sklonu, valivého odporu, odporu vzduchu a zrýchlenia, a prepočíta ju
   na percentá batérie. Rekuperáciu neuvažuje, vietor z GPX zistiť nemožno. Pri jednom odčítaní je odhad
   presný rádovo na 15 %, pri dvoch a viac na 5–10 %, ak sa nemenil režim asistencie.
+  Za praktickú nulu berie 5 % kapacity — pod touto hranicou riadiaca jednotka uberá výkon, zobrazovač
+  už nerozlišuje jednotky a zvyšok kapacity závisí od teploty a veku článkov natoľko, že sa naň
+  plánovať nedá.
+  <p class="feedback">Spätná väzba: <a href="mailto:sklad1234@gmail.com">sklad1234@gmail.com</a></p>
 </footer>
 </div>
 
@@ -265,7 +321,7 @@
 var $ = function(s){ return document.querySelector(s); };
 var TRACK = null, LAST = null;
 var DEF = {mRider:103,mBike:27.2,mGear:3,cap:820,volt:36,eta:0.78,crr:0.012,cda:0.74,
-           temp:27,vFlat:25,vMax:50,rider:25,socStart:100};
+           temp:27,vFlat:25,vMax:50,rider:25,socStart:100,socCrit:10,socDead:5};
 
 /* ---------- GPX ---------- */
 function parseGPX(text){
@@ -386,6 +442,7 @@ function resolveCharges(M,k,chgs,p,start){
 
 function calibrate(M,cals,chgs,p,start){
   var totalKm=M.dist[M.dist.length-1]/1000;
+  var crit=(p.crit==null?10:p.crit);
   var known=[{km:0,pct:(start==null?100:start)}];
   var i;
   for(i=0;i<chgs.length;i++) known.push({km:chgs[i].km,pct:chgs[i].pct,charge:true});
@@ -407,7 +464,8 @@ function calibrate(M,cals,chgs,p,start){
     var ia=idxAt(M.dist,a.km), ib=idxAt(M.dist,b.km);
     var e=M.cum[ib]-M.cum[ia];
     if (e<=0) continue;
-    raw.push({from:a.km,to:b.km,used:used,wh:e,km:b.km-a.km,drop:M.es[ib]-M.es[ia]});
+    raw.push({from:a.km,to:b.km,used:used,wh:e,km:b.km-a.km,drop:M.es[ib]-M.es[ia],
+              coarse:(b.pct<=crit || a.pct<=crit), endPct:b.pct});
   }
   for(i=0;i<raw.length;i++) flag(raw[i]);
 
@@ -418,12 +476,15 @@ function calibrate(M,cals,chgs,p,start){
     s.whPerKm = s.km>0 ? s.wh/s.km : 0;
     s.tooLow = s.k < kMin;
     s.tooHigh = s.k > kMax;
-    s.short = s.km < minKm;
+    // v pásme pod rezervou má displej krok 5 %, takže na spoľahlivú kalibráciu
+    // treba úsek zhruba dvakrát dlhší než pri odčítaní po jednotkách
+    s.short = s.km < (s.coarse ? minKm*2 : minKm);
     s.descent = s.tooLow && s.drop < -50 && s.whPerKm < 12;
     return s;
   }
   function absorb(a,b){
     a.wh+=b.wh; a.used+=b.used; a.km+=b.km; a.drop+=b.drop; a.to=b.to;
+    a.coarse=a.coarse||b.coarse; a.endPct=b.endPct;
     a.merged=(a.merged||0)+1;
     a.absorbed=(a.absorbed||[]).concat([b.from]);
     return flag(a);
@@ -431,7 +492,7 @@ function calibrate(M,cals,chgs,p,start){
   function copy(s){
     return {from:s.from,to:s.to,used:s.used,wh:s.wh,km:s.km,drop:s.drop,
             k:s.k,whPerKm:s.whPerKm,tooLow:s.tooLow,tooHigh:s.tooHigh,
-            short:s.short,descent:s.descent};
+            short:s.short,descent:s.descent,coarse:s.coarse,endPct:s.endPct};
   }
   var merged=[], j;
   for(j=0;j<raw.length;j++){
@@ -446,8 +507,12 @@ function calibrate(M,cals,chgs,p,start){
 
   var good=merged.filter(function(s){ return !s.tooLow && !s.tooHigh; });
   if (good.length){
-    var sw=0,su=0,ks=[];
-    for(i=0;i<good.length;i++){ sw+=good[i].wh; su+=good[i].used; ks.push(good[i].k); }
+    var sw=0,su=0,ks=[],w;
+    for(i=0;i<good.length;i++){
+      // odčítanie z pásma pod rezervou má krok 5 %, teda ±2,5 % neistoty — váži polovicou
+      w = good[i].coarse ? 0.5 : 1;
+      sw+=good[i].wh*w; su+=good[i].used*w; ks.push(good[i].k);
+    }
     var k=sw/su;
     var spread = good.length>1 ? (Math.max.apply(null,ks)-Math.min.apply(null,ks))/k*100 : null;
     return {k:k,segs:merged,raw:raw,used:good,spread:spread,mode:"kalibrovaný",
@@ -469,9 +534,10 @@ function socCurve(M,k,chgs,start){
 }
 
 /* ---------- graf ---------- */
-function chart(M,soc,cals,chgs,zero,narrow){
-  var W=1000,H=narrow?600:520,L=narrow?70:54,Rr=16,T=14,B=narrow?46:34;
-  var fs=narrow?1.75:1, sw=narrow?1.7:1;
+function chart(M,soc,cals,chgs,zero,narrow,lim){
+  var W=1000,H=narrow?620:530,L=narrow?78:58,Rr=16,T=14,B=narrow?50:36;
+  var fs=narrow?2.05:1.15, sw=narrow?2.1:1.25;
+  var crit=(lim&&lim.crit!=null)?lim.crit:10, dead=(lim&&lim.dead!=null)?lim.dead:5;
   var gap=16, hTop=(H-T-B-gap)*0.34, hBot=(H-T-B-gap)-hTop;
   var n=M.dist.length,total=M.dist[n-1],i;
   var eMin=Infinity,eMax=-Infinity,sMinRaw=Infinity;
@@ -508,9 +574,19 @@ function chart(M,soc,cals,chgs,zero,narrow){
     s+='<text x="'+(L-7)+'" y="'+(Ye(e)+3.5*fs)+'" text-anchor="end" font-size="'+(10.5*fs)+'" font-family="var(--font-data)" fill="var(--ink-soft)">'+Math.round(e)+'</text>';
   });
   s+='<text x="'+(L-7)+'" y="'+(T+11*fs)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-family="var(--font-map)" fill="var(--ink-soft)" letter-spacing="1.4">M n.m.</text>';
+  /* pásmo rezervy (displej už skáče po 5 %) a pásmo kritických percent */
+  if(crit>dead){
+    s+='<rect x="'+L+'" y="'+Ys(crit)+'" width="'+(W-L-Rr)+'" height="'+(Ys(dead)-Ys(crit))+'" fill="var(--contour)" opacity=".28"/>';
+    s+='<line x1="'+L+'" y1="'+Ys(crit)+'" x2="'+(W-Rr)+'" y2="'+Ys(crit)+'" stroke="var(--contour)" stroke-width="'+(1.6*sw)+'" stroke-dasharray="8 5"/>';
+    s+='<text x="'+(W-Rr-4)+'" y="'+(Ys(crit)-5*fs)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-weight="700" font-family="var(--font-map)" fill="var(--ink)" letter-spacing="1.2">REZERVA '+Math.round(crit)+' %</text>';
+  }
+  s+='<rect x="'+L+'" y="'+Ys(dead)+'" width="'+(W-L-Rr)+'" height="'+(Ys(sMin)-Ys(dead))+'" fill="var(--crit)" opacity=".18"/>';
+  s+='<line x1="'+L+'" y1="'+Ys(dead)+'" x2="'+(W-Rr)+'" y2="'+Ys(dead)+'" stroke="var(--crit)" stroke-width="'+(2*sw)+'"/>';
+  s+='<text x="'+(W-Rr-4)+'" y="'+(Ys(dead)+13*fs)+'" text-anchor="end" font-size="'+(10*fs)+'" font-weight="700" font-family="var(--font-map)" fill="var(--crit)" letter-spacing="1.2">KRITICKÝCH '+Math.round(dead)+' %</text>';
+
   [0,25,50,75,100].forEach(function(v){
     s+='<line x1="'+L+'" y1="'+Ys(v)+'" x2="'+(W-Rr)+'" y2="'+Ys(v)+'" stroke="var(--rule)" stroke-width="'+((v===0?1.2:0.6)*sw)+'"/>';
-    s+='<text x="'+(L-7)+'" y="'+(Ys(v)+3.5*fs)+'" text-anchor="end" font-size="'+(10.5*fs)+'" font-family="var(--font-data)" fill="var(--ink-soft)">'+v+'</text>';
+    s+='<text x="'+(L-7)+'" y="'+(Ys(v)+3.5*fs)+'" text-anchor="end" font-size="'+(10.5*fs)+'" font-weight="700" font-family="var(--font-data)" fill="var(--ink)">'+v+'</text>';
   });
   s+='<text x="'+(L-7)+'" y="'+(Ys(100)-9*fs)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-family="var(--font-map)" fill="var(--ink-soft)" letter-spacing="1.4">%</text>';
   ticks.forEach(function(km){
@@ -526,10 +602,19 @@ function chart(M,soc,cals,chgs,zero,narrow){
     s+='<circle cx="'+x+'" cy="'+y+'" r="'+(4.5*fs)+'" fill="'+col+'" stroke="var(--sheet-2)" stroke-width="'+(1.4*sw)+'"/>';
     s+='<text x="'+x+'" y="'+(y-10*fs)+'" text-anchor="middle" font-size="'+(10*fs)+'" font-family="var(--font-data)" fill="'+col+'">'+Math.round(m.pct)+'%</text>';
   });
+  if(lim&&lim.critPt){
+    s+='<line x1="'+X(lim.critPt.m)+'" y1="'+(T+hTop+gap)+'" x2="'+X(lim.critPt.m)+'" y2="'+(H-B)+'" stroke="var(--contour)" stroke-width="'+(1.4*sw)+'" stroke-dasharray="6 5"/>';
+    s+='<circle cx="'+X(lim.critPt.m)+'" cy="'+Ys(crit)+'" r="'+(4*fs)+'" fill="var(--contour)" stroke="var(--sheet-2)" stroke-width="'+(1.4*sw)+'"/>';
+  }
+  if(lim&&lim.deadPt){
+    s+='<line x1="'+X(lim.deadPt.m)+'" y1="'+T+'" x2="'+X(lim.deadPt.m)+'" y2="'+(H-B)+'" stroke="var(--crit)" stroke-width="'+(1.8*sw)+'" stroke-dasharray="3 4"/>';
+    s+='<path d="M '+X(lim.deadPt.m)+' '+(Ys(dead)-1)+' l '+(-7*fs)+' '+(-12*fs)+' l '+(14*fs)+' 0 Z" fill="var(--crit)"/>';
+    s+='<text x="'+X(lim.deadPt.m)+'" y="'+(Ys(dead)-15*fs)+'" text-anchor="middle" font-size="'+(11.5*fs)+'" font-family="var(--font-data)" font-weight="800" fill="var(--crit)">'+fmt(lim.deadPt.m/1000)+' km</text>';
+  }
   if(zero){
     s+='<line x1="'+X(zero.m)+'" y1="'+T+'" x2="'+X(zero.m)+'" y2="'+(H-B)+'" stroke="var(--drain)" stroke-width="'+sw+'" stroke-dasharray="2 4"/>';
     s+='<path d="M '+X(zero.m)+' '+(Ys(0)-1)+' l '+(-6.5*fs)+' '+(-11*fs)+' l '+(13*fs)+' 0 Z" fill="var(--drain)"/>';
-    s+='<text x="'+X(zero.m)+'" y="'+(Ys(0)+16*fs)+'" text-anchor="middle" font-size="'+(11.5*fs)+'" font-family="var(--font-data)" font-weight="700" fill="var(--drain)">'+fmt(zero.m/1000)+' km</text>';
+    s+='<text x="'+X(zero.m)+'" y="'+(Ys(0)+16*fs)+'" text-anchor="middle" font-size="'+(11.5*fs)+'" font-family="var(--font-data)" font-weight="800" fill="var(--drain)">'+fmt(zero.m/1000)+' km</text>';
   }
   return '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Profil trasy a zostatku batérie">'+s+'</svg>';
 }
@@ -549,8 +634,13 @@ function render(tr,p,cals,chgsIn){
   var soc=socCurve(M,C.k,chgs,start);
   var n=M.dist.length,total=M.dist[n-1];
 
-  var zero=null;
-  for(i=0;i<n;i++) if(soc[i]<=0){ zero={m:M.dist[i],ele:M.es[i],lat:tr.lat[i],lon:tr.lon[i]}; break; }
+  var crit=(p.crit==null?10:p.crit), dead=(p.dead==null?5:p.dead);
+  var mark=function(level){
+    for(var j=0;j<n;j++) if(soc[j]<=level)
+      return {m:M.dist[j],ele:M.es[j],lat:tr.lat[j],lon:tr.lon[j],idx:j};
+    return null;
+  };
+  var zero=mark(0), critPt=mark(crit), deadPt=mark(dead);
 
   var gain=0;
   for(i=1;i<n;i++){ var d=M.es[i]-M.es[i-1]; if(d>0) gain+=d; }
@@ -561,25 +651,36 @@ function render(tr,p,cals,chgsIn){
   var rows=[], kmStep=total>50000?5:(total>20000?2:1);
   // dojazd z priemernej spotreby na poslednom úseku (tak, ako ho počíta zobrazovač)
   var win=Math.min(5000, Math.max(1000, total*0.2));
+  // dojazd sa počíta po kritickú hodnotu, nie po nulu — pod ňou sa už na batériu spoľahnúť nedá
   var rangeAt=function(idx){
-    if(soc[idx]<=0) return 0;
+    if(soc[idx]<=dead) return 0;
     var back=M.dist[idx]-win;
     if(back<0) back=0;
     var j=idxAt(M.dist,back/1000);
     var dd=M.dist[idx]-M.dist[j], dw=M.cum[idx]-M.cum[j];
     if(dd<200 || dw<=0) return null;
     var whPerKm=dw/(dd/1000);
-    return soc[idx]*C.k/whPerKm;
+    return (soc[idx]-dead)*C.k/whPerKm;
   };
   var fmtRange=function(r){
     if(r===null) return "—";
     if(r>300) return "&gt;300";
     return Math.round(r);
   };
+  // čo v tom mieste ukáže zobrazovač: pod rezervou už len 5 % a 0 %
+  var shown=function(v){
+    if(v<=0) return 0;
+    if(v>crit) return Math.round(v);
+    return v>=dead ? Math.round(dead) : 0;
+  };
   var pushRow=function(idx,label){
-    rows.push('<tr><td>'+label+'</td><td>'+Math.round(M.es[idx])+'</td><td class="'+(soc[idx]<0?'warn':'')+'">'
-      +Math.round(soc[idx])+'</td>'
-      +'<td class="'+(soc[idx]<=0?'warn':'')+'">'+fmtRange(rangeAt(idx))+'</td></tr>');
+    var v=soc[idx];
+    var cls = v<=dead ? 'dead' : (v<=crit ? 'crit' : '');
+    var pct = Math.round(v);
+    var disp = (v<=crit && v>0) ? ' <small>(displej '+shown(v)+' %)</small>' : '';
+    rows.push('<tr class="'+cls+'"><td>'+label+'</td><td>'+Math.round(M.es[idx])+'</td>'
+      +'<td>'+pct+disp+'</td>'
+      +'<td>'+fmtRange(rangeAt(idx))+'</td></tr>');
   };
   for(var km=0;km*1000<=total;km+=kmStep) pushRow(idxAt(M.dist,km),String(km));
   pushRow(n-1,fmt(total/1000));
@@ -592,7 +693,8 @@ function render(tr,p,cals,chgsIn){
         var st = s.merged ? '<span style="color:var(--water)">spojený</span>'
                : s.tooLow ? '<span style="color:var(--drain)">nemožný</span>'
                : s.tooHigh ? '<span style="color:var(--drain)">nereálny</span>'
-               : s.short ? '<span style="color:var(--contour)">krátky</span>' : 'v poriadku';
+               : s.short ? '<span style="color:var(--contour)">krátky</span>'
+               : s.coarse ? '<span style="color:var(--contour)">hrubý (pod rezervou)</span>' : 'v poriadku';
         return '<tr><td>'+fmt(s.from)+' – '+fmt(s.to)+' km</td><td>'+Math.round(s.wh)+' Wh</td><td>'
           +Math.round(s.used)+' %</td><td>'+fmt(s.k,2)+'</td><td>'+st+'</td></tr>'; }).join("")
       +'</tbody></table></div>';
@@ -626,6 +728,12 @@ function render(tr,p,cals,chgsIn){
       +' je na kalibráciu krátky (pod '+fmt(C.minKm)+' km). Zobrazovač ukazuje percentá po skokoch, '
       +'takže na takej vzdialenosti prevláda zaokrúhlenie nad skutočnou spotrebou. Odčítajte radšej '
       +'po dlhšom úseku.</p>';
+  var coarseSegs=C.used.filter(function(s){ return s.coarse; });
+  if (coarseSegs.length)
+    notes+='<p class="note">Odčítanie na '+coarseSegs.map(function(s){return fmt(s.to)+' km';}).join(", ")
+      +' padlo pod rezervu '+Math.round(crit)+' %, kde zobrazovač ukazuje už len '+Math.round(dead)
+      +' % a 0 %. Skutočná hodnota je v pásme ±'+fmt(dead/2)+' %, preto som takému odčítaniu dal '
+      +'polovičnú váhu. Na presnú kalibráciu odčítavajte radšej nad rezervou.</p>';
   if (M.synthetic)
     notes+='<p class="note">Trasa nemá časové značky, takže rýchlosť je dopočítaná z rovnováhy síl pri '
       +'rovinnej rýchlosti '+Math.round(p.vFlat)+' km/h. Práca proti gravitácii a valivému odporu tým '
@@ -651,26 +759,43 @@ function render(tr,p,cals,chgsIn){
   $("#stage").innerHTML=
     '<figure><figcaption><span>'+(tr.name||"Profil trasy")+'</span><em>'+fmt(total/1000)+' km · '
       +Math.round(gain)+' m · '+(M.synthetic?"plán":"záznam")+' · '+C.mode+'</em></figcaption>'
-      +chart(M,soc,cals,chgs,zero,narrow)+'</figure>'
+      +chart(M,soc,cals,chgs,zero,narrow,{crit:crit,dead:dead,critPt:critPt,deadPt:deadPt})+'</figure>'
     +'<div class="stats">'
+      +'<div class="stat'+(deadPt?' danger':'')+'"><div class="k">Kritických '+Math.round(dead)+' % pri</div><div class="v">'
+        +(deadPt?fmt(deadPt.m/1000)+' <small>km</small>':'—')+'</div></div>'
+      +(crit>dead
+        ? '<div class="stat'+(critPt&&!deadPt?' danger':'')+'"><div class="k">Rezerva '+Math.round(crit)+' % pri</div><div class="v">'
+          +(critPt?fmt(critPt.m/1000)+' <small>km</small>':'—')+'</div></div>'
+        : '')
       +'<div class="stat"><div class="k">Batéria na nule</div><div class="v">'+(zero?fmt(zero.m/1000)+' <small>km</small>':'—')+'</div></div>'
-      +'<div class="stat"><div class="k">Zostatok v cieli</div><div class="v">'+Math.max(Math.round(soc[n-1]),0)+' <small>%</small></div></div>'
+      +'<div class="stat'+(soc[n-1]<=crit?' danger':'')+'"><div class="k">Zostatok v cieli</div><div class="v">'+Math.max(Math.round(soc[n-1]),0)+' <small>%</small></div></div>'
       +'<div class="stat"><div class="k">Wh na 1 %</div><div class="v">'+fmt(C.k,2)+'</div></div>'
       +'<div class="stat"><div class="k">Podiel jazdca</div><div class="v">'+Math.round(riderShare)+' <small>%</small></div></div>'
       +'<div class="stat"><div class="k">Priemer</div><div class="v">'+fmt(total/1000/hours)+' <small>km/h</small></div></div>'
     +'</div>'
-    +(zero
-      ? '<p class="note">Batéria dosiahne 0 % pri '+fmt(zero.m/1000)+' km, v nadmorskej výške '
-        +Math.round(zero.ele)+' m ('+zero.lat.toFixed(5)+' N, '+zero.lon.toFixed(5)+' E). Do konca trasy '
-        +'odtiaľ zostáva '+fmt(total/1000-zero.m/1000)+' km.</p>'
-      : '<p class="note">Batéria na tejto trase nedosiahne nulu. V cieli zostáva '+Math.round(soc[n-1])
-        +' %, teda asi '+Math.round(soc[n-1]*p.cap/100)+' Wh.</p>')
+    +(deadPt
+      ? '<p class="note crit-note">Kritická hranica '+Math.round(dead)+' % nastane pri '+fmt(deadPt.m/1000)
+        +' km, v nadmorskej výške '+Math.round(deadPt.ele)+' m ('+deadPt.lat.toFixed(5)+' N, '
+        +deadPt.lon.toFixed(5)+' E). Do konca trasy odtiaľ zostáva '+fmt(total/1000-deadPt.m/1000)
+        +' km. Odtiaľto počítajte s dojazdom bez asistencie'
+        +(zero ? '; úplná nula pripadne na '+fmt(zero.m/1000)+' km, ale tých posledných '+Math.round(dead)
+                 +' % je už len teoretických.' : '.')
+        +'</p>'
+      : critPt
+      ? '<p class="note crit-note">Batéria klesne do rezervy '+Math.round(crit)+' % pri '+fmt(critPt.m/1000)
+        +' km — odtiaľ už zobrazovač ukazuje len '+Math.round(dead)+' % a 0 %. Kritickú hranicu '
+        +Math.round(dead)+' % na tejto trase nedosiahne, v cieli zostáva '+Math.round(soc[n-1])+' %.</p>'
+      : '<p class="note">Batéria na tejto trase nedosiahne ani rezervu '+Math.round(crit)+' %. V cieli zostáva '
+        +Math.round(soc[n-1])+' %, teda asi '+Math.round(soc[n-1]*p.cap/100)+' Wh, z toho použiteľných '
+        +Math.round(Math.max(soc[n-1]-dead,0)*p.cap/100)+' Wh nad kritickou hranicou.</p>')
     +notes+segTable
     +'<div class="tw"><table><caption>Priebeh po trase</caption><thead><tr><th>Km</th><th>Výška [m]</th>'
-    +'<th>Zostatok [%]</th><th>Dojazd [km]</th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>'
+    +'<th>Zostatok [%]</th><th>Dojazd do '+Math.round(dead)+' % [km]</th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>'
     +'<p class="hint" style="margin-top:-14px">Dojazd je odhad zo spotreby na poslednom úseku dlhom '
-    +fmt(win/1000)+' km, teda tak, ako ho počíta zobrazovač na bicykli. V stúpaní preto klesá a na zjazde '
-    +'rastie. Nehovorí, ako ďaleko dôjdete po tejto trase — to hovorí bod nuly vyššie.</p>';
+    +fmt(win/1000)+' km, teda tak, ako ho počíta zobrazovač na bicykli — v stúpaní klesá a na zjazde '
+    +'rastie. Počíta sa po kritickú hranicu '+Math.round(dead)+' %, nie po nulu. Riadky pod rezervou '
+    +Math.round(crit)+' % sú zvýraznené a v zátvorke je hodnota, ktorú v tom mieste ukáže zobrazovač. '
+    +'Ako ďaleko dôjdete po tejto trase hovorí bod kritickej hranice vyššie, nie tento stĺpec.</p>';
 }
 
 /* ---------- riadky ---------- */
@@ -858,7 +983,7 @@ $("#cda").oninput=function(){ $("#cdaPre").value="custom"; };
 
 /* ---------- profily jazdcov ---------- */
 var PROF_KEY="ebike.profiles.v1", LAST_KEY="ebike.lastProfile.v1";
-var PROF_FIELDS=["mRider","mBike","mGear","cap","volt","eta"];
+var PROF_FIELDS=["mRider","mBike","mGear","cap","volt","eta","socCrit","socDead"];
 
 function storeGet(key){
   try{ return window.localStorage.getItem(key); }catch(e){ return null; }
@@ -956,6 +1081,23 @@ $("#profImport").onclick=function(){
 fillProfileSelect(storeGet(LAST_KEY));
 if($("#profSel").value) applyProfile($("#profSel").value);
 
+/* ---------- režim na priame slnko ---------- */
+(function(){
+  var KEY="ebike.sun.v1", b=$("#sunBtn");
+  function set(on){
+    document.documentElement.setAttribute("data-sun", on?"1":"0");
+    b.setAttribute("aria-pressed", on?"true":"false");
+    b.textContent = on ? "☀ Späť" : "☀ Na slnko";
+    document.querySelector('meta[name=theme-color]').setAttribute("content", on?"#000000":"#101A14");
+    try{ window.localStorage.setItem(KEY, on?"1":"0"); }catch(e){}
+    if (LAST) render(LAST.tr,LAST.p,LAST.cals,LAST.chgs);
+  }
+  var saved=null;
+  try{ saved=window.localStorage.getItem(KEY); }catch(e){}
+  set(saved==="1");
+  b.onclick=function(){ set(document.documentElement.getAttribute("data-sun")!=="1"); };
+})();
+
 /* ---------- kontrola prostredia ---------- */
 (function(){
   var framed=false;
@@ -1019,7 +1161,10 @@ $("#form").onsubmit=function(e){
   var p={ mass:num("#mRider")+num("#mBike")+num("#mGear"), cap:num("#cap"), volt:num("#volt")||36,
     crr:num("#crr"), cda:num("#cda"), temp:num("#temp"), eta:num("#eta")||0.78,
     vFlat:num("#vFlat")||25, vMax:num("#vMax")||50, rider:clamp(num("#rider")/100,0,0.9),
-    socStart:clamp(num("#socStart")||100,1,100) };
+    socStart:clamp(num("#socStart")||100,1,100),
+    crit:clamp(isFinite(parseFloat($("#socCrit").value))?num("#socCrit"):10,0,40),
+    dead:clamp(isFinite(parseFloat($("#socDead").value))?num("#socDead"):5,0,20) };
+  if (p.dead>p.crit) p.crit=p.dead;
   if(p.mass<=0||p.cap<=0){
     $("#stage").innerHTML='<p class="note err">Hmotnosť aj kapacita musia byť väčšie ako nula.</p>'; return;
   }
