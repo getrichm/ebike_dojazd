@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="sk">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Pravdepodobný vývoj výkonu batérie</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#101A14">
+<meta name="description" content="Výpočet priebehu kapacity batérie a dojazdu e-biku z GPX stopy.">
+<style>
+  :root{
+    --sheet:#EFF1E9; --sheet-2:#F8F9F4;
+    --ink:#101A14; --ink-soft:#39473E;
+    --contour:#8A7647; --contour-soft:#D2C39C;
+    --charge:#1C5B37; --drain:#9C2418; --water:#2A5F82; --rule:#9BA595;
+    --crit:#9C2418; --crit-bg:rgba(156,36,24,.13);
+    --font-map:'Avenir Next Condensed','HelveticaNeue-CondensedBold','Helvetica Neue Condensed','Arial Narrow',system-ui,sans-serif;
+    --font-data:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --font-body:-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',Roboto,sans-serif;
+  }
+  /* režim na priame slnko — maximálny kontrast, hrubšie písmo */
+  html[data-sun="1"]{
+    --sheet:#FFFFFF; --sheet-2:#FFFFFF;
+    --ink:#000000; --ink-soft:#1F2A23;
+    --contour:#6B5A31; --contour-soft:#E0D6B8;
+    --charge:#0B4A28; --drain:#8A1005; --water:#134766; --rule:#6E7A6B;
+    --crit:#8A1005; --crit-bg:rgba(138,16,5,.16);
+  }
+  html[data-sun="1"] body{font-weight:600}
+  html[data-sun="1"] .note,html[data-sun="1"] .hint,html[data-sun="1"] label,
+  html[data-sun="1"] .sub,html[data-sun="1"] footer{color:var(--ink)}
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--sheet);
+    color:var(--ink); font-family:var(--font-body); font-size:17px; font-weight:500; line-height:1.55;
+    -webkit-tap-highlight-color:rgba(28,91,55,.18);
+  }
+  .wrap{max-width:1180px;margin:0 auto;
+    padding:calc(20px + env(safe-area-inset-top)) max(14px,env(safe-area-inset-left)) 72px}
+  header{border-bottom:3px solid var(--ink);padding-bottom:14px;margin-bottom:22px}
+  .head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .eyebrow{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.2em;font-size:13px;
+    font-weight:700;color:var(--ink-soft);margin:0 0 6px}
+  h1{font-family:var(--font-map);font-weight:800;font-size:clamp(27px,6.2vw,42px);text-transform:uppercase;
+    letter-spacing:.02em;margin:0;line-height:1.02}
+  .sub{margin:10px 0 0;color:var(--ink-soft);max-width:62ch;font-size:15.5px;
+    text-align:justify;text-justify:inter-word;
+    -webkit-hyphens:auto;hyphens:auto;overflow-wrap:break-word}
+  .sun{flex:0 0 auto;background:var(--ink);color:var(--sheet);border:2px solid var(--ink);
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:12.5px;font-weight:700;
+    padding:8px 12px;cursor:pointer;min-height:44px;white-space:nowrap}
+  html[data-sun="1"] .sun{background:var(--sheet);color:var(--ink)}
+
+  .grid{display:grid;grid-template-columns:350px minmax(0,1fr);gap:24px;align-items:start}
+  @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+  .legend{background:var(--sheet-2);border:2px solid var(--ink);box-shadow:5px 5px 0 rgba(16,26,20,.2)}
+  .legend h2{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.14em;font-size:14px;
+    margin:0;padding:11px 14px;border-bottom:2px solid var(--ink);background:var(--ink);color:#fff;
+    display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .reset{background:none;border:2px solid rgba(255,255,255,.7);color:#fff;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:12px;font-weight:700;
+    padding:6px 10px;cursor:pointer;min-height:34px}
+  .reset:hover{background:#fff;color:var(--ink)}
+  .sect{padding:15px 14px;border-bottom:2px dashed var(--rule)}
+  .sect:last-child{border-bottom:0}
+  .sect>h3{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.13em;font-size:14px;
+    font-weight:800;color:var(--ink);margin:0 0 11px}
+  label{display:block;font-size:14px;font-weight:700;color:var(--ink);margin:0 0 4px}
+  .row{display:flex;gap:9px;margin-bottom:12px}
+  .row>*{flex:1;min-width:0}
+  input,select,button{font-family:var(--font-data);color:var(--ink)}
+  input[type=number],input[type=text],select{
+    width:100%;padding:11px 10px;background:#fff;border:2px solid var(--ink);border-radius:0;
+    font-size:17px;font-weight:700; -webkit-appearance:none;appearance:none}
+  select{font-family:var(--font-body);font-size:17px;font-weight:600;
+    background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);
+    background-position:calc(100% - 16px) 54%,calc(100% - 10px) 54%;background-size:7px 7px,7px 7px;background-repeat:no-repeat;padding-right:32px}
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--water);outline-offset:1px}
+
+  .drop{border:3px dashed var(--contour);background:rgba(210,195,156,.22);padding:22px 14px;text-align:center;cursor:pointer;transition:background .15s}
+  .drop:hover,.drop.over{background:rgba(210,195,156,.42)}
+  .drop strong{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:16px;display:block}
+  .drop span{font-size:14px;color:var(--ink-soft)}
+
+  .pt{display:grid;gap:8px;margin-bottom:8px;align-items:center}
+  .pt.c2{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px}
+  .pt.c3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) 44px}
+  .pt button{background:none;border:2px solid var(--drain);cursor:pointer;color:var(--drain);
+    font-size:20px;font-weight:700;line-height:1;min-height:46px}
+  .pt button:hover{background:var(--drain);color:#fff}
+  .add{width:100%;background:none;border:2px dashed var(--contour);padding:11px;cursor:pointer;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:13.5px;font-weight:700;
+    color:var(--ink);min-height:46px}
+  .add:hover{background:rgba(210,195,156,.4)}
+  .go{width:100%;background:var(--ink);color:#fff;border:0;padding:17px;cursor:pointer;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.16em;font-size:18px;font-weight:800;min-height:56px}
+  .go:hover{background:var(--charge)}
+  .go:disabled{background:var(--rule);color:#fff;cursor:not-allowed}
+
+  .empty{border:2px dashed var(--contour);padding:44px 20px;text-align:center;color:var(--ink);background:var(--sheet-2);font-size:16px}
+  .empty p{margin:0;max-width:46ch;display:inline-block}
+  figure{margin:0 0 20px;background:var(--sheet-2);border:2px solid var(--ink);box-shadow:5px 5px 0 rgba(16,26,20,.2)}
+  figcaption{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:14px;font-weight:700;
+    padding:11px 14px;border-bottom:2px solid var(--ink);background:var(--ink);color:#fff;
+    display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  figcaption em{font-style:normal;opacity:.85;letter-spacing:.06em}
+  svg.chart{display:block;width:100%;height:auto}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:2px solid var(--ink);margin-bottom:20px;background:var(--sheet-2)}
+  .stat{padding:12px 14px;border-right:2px solid var(--rule);border-bottom:2px solid var(--rule)}
+  .stat .k{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.11em;font-size:12.5px;font-weight:700;color:var(--ink-soft)}
+  .stat .v{font-family:var(--font-data);font-size:26px;font-weight:700;margin-top:3px;line-height:1.15}
+  .stat .v small{font-size:14px;font-weight:700;color:var(--ink-soft)}
+  .stat.danger{background:var(--crit-bg)}
+  .stat.danger .v,.stat.danger .k{color:var(--crit)}
+
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;border:2px solid var(--ink)}
+  table{width:100%;border-collapse:collapse;background:var(--sheet-2);font-family:var(--font-data);font-size:15px;font-weight:600}
+  caption{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.12em;font-size:14px;font-weight:700;
+    text-align:left;padding:11px 14px;background:var(--ink);color:#fff}
+  th,td{padding:9px 13px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{font-family:var(--font-map);text-transform:uppercase;letter-spacing:.08em;font-size:13px;color:var(--ink);font-weight:800}
+  tbody tr:last-child td{border-bottom:0}
+  td.warn{color:var(--drain);font-weight:800}
+  tr.crit td{background:var(--crit-bg);color:var(--crit);font-weight:800}
+  tr.dead td{background:var(--crit-bg);color:var(--crit);font-weight:800;text-decoration-color:var(--crit)}
+  .note{font-size:15.5px;color:var(--ink);border-left:5px solid var(--contour);padding:4px 0 4px 14px;margin:0 0 15px;max-width:72ch}
+  .err{border-left-color:var(--drain);color:var(--drain);font-weight:700}
+  .crit-note{border-left-color:var(--crit);background:var(--crit-bg);padding:9px 12px 9px 14px;color:var(--crit);font-weight:700}
+  .hint{font-size:14px;color:var(--ink-soft);margin:-4px 0 12px;line-height:1.45}
+  a{color:var(--water);text-decoration:underline;text-underline-offset:3px;
+    text-decoration-thickness:2px;font-weight:700}
+  a:hover{color:var(--charge)}
+  html[data-sun="1"] a{color:var(--ink);text-decoration-thickness:3px}
+  .feedback{margin:14px 0 0;padding-top:12px;border-top:2px solid var(--rule);
+    font-size:16px;font-weight:700;color:var(--ink)}
+  footer{margin-top:40px;padding-top:14px;border-top:2px solid var(--rule);font-size:14.5px;color:var(--ink-soft);max-width:74ch}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="head-top">
+    <div>
+      <p class="eyebrow">Výpočet z GPX stopy</p>
+      <h1>Pravdepodobný vývoj výkonu batérie</h1>
+    </div>
+    <button type="button" class="sun" id="sunBtn" aria-pressed="false">☀ Na slnko</button>
+  </div>
+  <p class="sub">Tento nástroj slúži na približné určenie výkonu batérie tvojho e-biku a dojazdu
+  v ľubovoľnom bode trasy. Naplánuj si trasu napríklad na <a href="https://mapy.com" target="_blank" rel="noopener">mapy.com</a> a vyexportuj *.gpx.</p>
+  <p class="sub">Nahraj súbor GPX, doplň tvoje potrebné parametre a zvoľ VYPOČÍTAŤ. Výsledkom je
+  priebeh zostatku batérie po celej trase a bod, kde kapacita batérie dosiahne 0 %.</p>
+  <p class="sub">V priebehu jazdy umožňuje aj priebežné výpočty — keď zadáš údaje z jazdy, výsledok
+  sa bude optimalizovať. Prípadne je možné doplniť aj priebežné dobitie batérie, čo sa samozrejme
+  odrazí na predĺžení celkového dojazdu.</p>
+  <p class="sub">Posledné percentá kapacity sú kritické pásmo: zobrazovač už neukazuje jednotky, ale
+  skočí z 10 % na 5 % a potom na 0 %, motor uberá výkon a odhad dojazdu prestáva platiť. Model preto
+  osobitne vyznačí kilometer, na ktorom batéria klesne do rezervy.</p>
+  <p class="sub">Pri dostatočných údajoch z jazdy pracuje tento model s chybou do 10 %.</p>
+</header>
+
+<div class="grid">
+  <form class="legend" id="form">
+    <h2><span>Vstupy</span><button type="button" class="reset" id="reset">Vynulovať</button></h2>
+
+    <div class="sect">
+      <h3>Trasa</h3>
+      <div class="drop" id="drop" tabindex="0" role="button">
+        <strong id="dropName">Vybrať súbor GPX</strong>
+        <span id="dropInfo">záznam jazdy alebo plánovaná trasa</span>
+      </div>
+      <input type="file" id="file" hidden>
+      <button type="button" class="add" id="pasteToggle" style="margin-top:8px">alebo vložiť obsah GPX</button>
+      <div id="pasteBox" hidden style="margin-top:8px">
+        <textarea id="pasteArea" rows="4" placeholder="Sem vložte celý obsah súboru .gpx"
+          style="width:100%;padding:8px;border:1px solid var(--rule);font-family:var(--font-data);font-size:16px;background:#fff"></textarea>
+        <button type="button" class="add" id="pasteLoad" style="margin-top:6px">Načítať vložený text</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <h3>Bicykel a jazdec</h3>
+      <label for="profSel">Profil</label>
+      <select id="profSel"><option value="">— bez profilu —</option></select>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="profName" placeholder="názov profilu" autocomplete="off">
+        <button type="button" class="add" id="profSave" style="flex:0 0 84px">Uložiť</button>
+        <button type="button" class="add" id="profDel" style="flex:0 0 84px">Zmazať</button>
+      </div>
+      <p class="hint" id="profHint">Profil si zapamätá údaje z tejto sekcie a ponúkne ich pri ďalšom
+      otvorení. Ukladá sa do tohto prehliadača — na inom zariadení použite Vyviezť a Priniesť.</p>
+      <div class="row">
+        <button type="button" class="add" id="profExport">Vyviezť</button>
+        <button type="button" class="add" id="profImport">Priniesť</button>
+      </div>
+      <textarea id="profBox" rows="3" hidden placeholder="sem vložte vyvezený text profilov"
+        style="width:100%;padding:8px;border:1px solid var(--rule);font-family:var(--font-data);font-size:16px;background:#fff;margin-bottom:10px"></textarea>
+      <div class="row">
+        <div><label for="mRider">Jazdec [kg]</label><input type="number" id="mRider" value="103" step="0.5" inputmode="decimal"></div>
+        <div><label for="mBike">Bicykel [kg]</label><input type="number" id="mBike" value="27.2" step="0.1" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label for="mGear">Výbava [kg]</label><input type="number" id="mGear" value="3" step="0.5" inputmode="decimal"></div>
+        <div><label for="cap">Batéria [Wh]</label><input type="number" id="cap" value="820" step="10" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label for="volt">Napätie [V]</label><input type="number" id="volt" value="36" step="1" inputmode="decimal"></div>
+        <div><label for="eta">Účinnosť pohonu</label><input type="number" id="eta" value="0.78" step="0.01" min="0.5" max="1" inputmode="decimal"></div>
+      </div>
+      <div class="row">
+        <div><label for="socCrit">Rezerva [%]</label><input type="number" id="socCrit" value="10" step="1" min="0" max="40" inputmode="decimal"></div>
+        <div><label for="socDead">Kritická hodnota [%]</label><input type="number" id="socDead" value="5" step="1" min="0" max="20" inputmode="decimal"></div>
+      </div>
+      <p class="hint">Pod rezervou (10 %) zobrazovač už nemeria po jednotkách — skočí na 5 % a potom
+      na 0 %. Kritická hodnota 5 % je posledný použiteľný stav: model ju berie ako praktickú nulu,
+      pretože pod ňou riadiaca jednotka uberá výkon a zvyšok kapacity sa spoľahnúť nedá.</p>
+    </div>
+
+    <div class="sect">
+      <h3>Odpory</h3>
+      <label for="crrPre">Plášte a povrch</label>
+      <select id="crrPre">
+        <option value="0.004">Cestné, vysoký tlak — 0,004</option>
+        <option value="0.007">Trekking na asfalte — 0,007</option>
+        <option value="0.012" selected>MTB blokované, tvrdý povrch — 0,012</option>
+        <option value="0.018">MTB na lesnej ceste — 0,018</option>
+        <option value="0.025">Mäkký terén, blato — 0,025</option>
+        <option value="custom">Vlastná hodnota</option>
+      </select>
+      <div class="row" style="margin-top:9px">
+        <div><label for="crr">Crr</label><input type="number" id="crr" value="0.012" step="0.001" inputmode="decimal"></div>
+        <div><label for="cda">CdA [m²]</label><input type="number" id="cda" value="0.74" step="0.01" inputmode="decimal"></div>
+      </div>
+      <label for="cdaPre">Posed</label>
+      <select id="cdaPre">
+        <option value="0.30">Aeropozícia — 0,30</option>
+        <option value="0.40">Cestný posed — 0,40</option>
+        <option value="0.55">Trekking, vzpriamene — 0,55</option>
+        <option value="0.74" selected>MTB, široké riadidlá — 0,74</option>
+        <option value="custom">Vlastná hodnota</option>
+      </select>
+      <p class="hint">Nad ~22 km/h prevláda odpor vzduchu, pod ňou valivý odpor.</p>
+      <label for="temp">Teplota [°C]</label>
+      <input type="number" id="temp" value="27" step="1" inputmode="decimal">
+    </div>
+
+    <div class="sect" id="planSect">
+      <h3>Plánovaná trasa</h3>
+      <div class="row">
+        <div><label for="vFlat">Rovina [km/h]</label><input type="number" id="vFlat" value="25" step="1" min="6" max="60" inputmode="decimal"></div>
+        <div><label for="vMax">Strop zjazdu [km/h]</label><input type="number" id="vMax" value="50" step="1" min="15" max="80" inputmode="decimal"></div>
+      </div>
+      <p class="hint">Použije sa len pri súboroch bez časových značiek. Rýchlosť v stúpaniach
+      a zjazdoch sa z nej dopočíta.</p>
+    </div>
+
+    <div class="sect">
+      <h3>Odčítania batérie</h3>
+      <label for="socStart">Stav na štarte [%]</label>
+      <input type="number" id="socStart" value="100" step="1" min="1" max="100" inputmode="decimal">
+      <p class="hint">Nemusíte vyrážať s plnou batériou. Odčítanie zadané na 0 km sa použije namiesto
+      tohto poľa.</p>
+      <div id="cals"></div>
+      <button type="button" class="add" id="addCal">+ pridať odčítanie</button>
+      <p class="hint">Km a zostatok v %. Aspoň jedno odčítanie nahradí odhad asistencie skutočnou
+      spotrebou. Dve a viac ukáže, či ste držali rovnaký režim.</p>
+    </div>
+
+    <div class="sect">
+      <h3>Dobíjanie</h3>
+      <label for="chgMode">Spôsob zadania</label>
+      <select id="chgMode">
+        <option value="pct" selected>Stav po dobití [%]</option>
+        <option value="amp">Nabíjačka [A] a čas [min]</option>
+      </select>
+      <div id="chgs" style="margin-top:9px"></div>
+      <button type="button" class="add" id="addChg">+ pridať dobitie</button>
+      <p class="hint" id="chgHint">Km zastávky a stav batérie po dobití v %.</p>
+    </div>
+
+    <div class="sect">
+      <h3>Bez odčítaní</h3>
+      <label for="rider">Podiel jazdca na práci [%]</label>
+      <input type="number" id="rider" value="25" step="5" min="0" max="90" inputmode="decimal">
+      <p class="hint">Použije sa, len ak nezadáte žiadne odčítanie.</p>
+    </div>
+
+    <div class="sect">
+      <button type="submit" class="go" id="go" disabled>Vypočítať</button>
+    </div>
+  </form>
+
+  <div id="stage">
+    <div class="empty"><p>Zatiaľ nič na zobrazenie. Začnite nahraním súboru GPX — funguje záznam
+    jazdy aj trasa z plánovača.</p></div>
+  </div>
+</div>
+
+<footer>
+  Model počíta mechanickú prácu zo sklonu, valivého odporu, odporu vzduchu a zrýchlenia, a prepočíta ju
+  na percentá batérie. Rekuperáciu neuvažuje, vietor z GPX zistiť nemožno. Pri jednom odčítaní je odhad
+  presný rádovo na 15 %, pri dvoch a viac na 5–10 %, ak sa nemenil režim asistencie.
+  Za praktickú nulu berie 5 % kapacity — pod touto hranicou riadiaca jednotka uberá výkon, zobrazovač
+  už nerozlišuje jednotky a zvyšok kapacity závisí od teploty a veku článkov natoľko, že sa naň
+  plánovať nedá.
+  <p class="feedback">Spätná väzba: <a href="mailto:sklad1234@gmail.com">sklad1234@gmail.com</a></p>
+</footer>
+</div>
+
+<script>
+"use strict";
+var $ = function(s){ return document.querySelector(s); };
+var TRACK = null, LAST = null;
+var DEF = {mRider:103,mBike:27.2,mGear:3,cap:820,volt:36,eta:0.78,crr:0.012,cda:0.74,
+           temp:27,vFlat:25,vMax:50,rider:25,socStart:100,socCrit:10,socDead:5};
+
+/* ---------- GPX ---------- */
+function parseGPX(text){
+  var doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length) throw new Error("Súbor sa nepodarilo prečítať ako XML.");
+  var pts = doc.getElementsByTagName("trkpt");
+  if (!pts.length) pts = doc.getElementsByTagName("rtept");
+  if (!pts.length) throw new Error("V súbore nie sú body trasy (trkpt ani rtept).");
+  var lat=[],lon=[],ele=[],time=[],withTime=0;
+  for (var i=0;i<pts.length;i++){
+    var p=pts[i];
+    var e=p.getElementsByTagName("ele")[0];
+    var t=p.getElementsByTagName("time")[0];
+    if (!e) continue;
+    lat.push(parseFloat(p.getAttribute("lat")));
+    lon.push(parseFloat(p.getAttribute("lon")));
+    ele.push(parseFloat(e.textContent));
+    var ms = t ? Date.parse(t.textContent) : NaN;
+    if (isFinite(ms)){ time.push(ms/1000); withTime++; } else time.push(NaN);
+  }
+  if (lat.length < 20) throw new Error("Trasa neobsahuje nadmorskú výšku (ele) v dostatočnom počte bodov.");
+  var nm = doc.getElementsByTagName("name")[0];
+  return {lat:lat,lon:lon,ele:ele,time:time,n:lat.length,
+          hasTime:withTime===lat.length, name:nm?nm.textContent.trim():null};
+}
+
+/* ---------- pomocné ---------- */
+function smooth(a,w){
+  var n=a.length,h=w>>1,out=new Float64Array(n),pre=new Float64Array(n+1),i;
+  for(i=0;i<n;i++) pre[i+1]=pre[i]+a[i];
+  for(i=0;i<n;i++){ var lo=Math.max(0,i-h),hi=Math.min(n,i+h+1); out[i]=(pre[hi]-pre[lo])/(hi-lo); }
+  return out;
+}
+function clamp(x,a,b){ return x<a?a:(x>b?b:x); }
+function fmt(x,d){ d=(d===undefined?1:d); return x.toLocaleString("sk-SK",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+/* ---------- fyzika ---------- */
+function speedAtPower(P,Fgr,k2,vMin,vMax){
+  var f=function(v){ return k2*v*v*v + Fgr*v - P; };
+  if (f(vMax)<=0) return vMax;
+  if (f(vMin)>=0) return vMin;
+  var lo=vMin,hi=vMax;
+  for (var i=0;i<40;i++){ var m=(lo+hi)/2; if (f(m)<0) lo=m; else hi=m; }
+  return (lo+hi)/2;
+}
+
+function model(tr,p){
+  var n=tr.n,R=6371000,i;
+  var dx=new Float64Array(n),dist=new Float64Array(n),dt=new Float64Array(n);
+  for(i=1;i<n;i++){
+    var la1=tr.lat[i-1]*Math.PI/180, la2=tr.lat[i]*Math.PI/180;
+    var dla=la2-la1, dlo=(tr.lon[i]-tr.lon[i-1])*Math.PI/180*Math.cos((la1+la2)/2);
+    dx[i]=R*Math.sqrt(dla*dla+dlo*dlo);
+    dist[i]=dist[i-1]+dx[i];
+  }
+  var es=smooth(smooth(tr.ele,21),7);
+  var rho=1.225*288.15/(273.15+p.temp), g=9.81, k2=0.5*rho*p.cda;
+  var v=new Float64Array(n);
+
+  if (tr.hasTime){
+    for(i=1;i<n;i++) dt[i]=Math.max(tr.time[i]-tr.time[i-1],1e-6);
+    dt[0]=1;
+    for(i=0;i<n;i++) v[i]=clamp(dx[i]/dt[i],0,25);
+    v=smooth(v,31);
+  } else {
+    var vFlat=p.vFlat/3.6, vMax=p.vMax/3.6;
+    var P=(p.crr*p.mass*g + k2*vFlat*vFlat)*vFlat;
+    for(i=1;i<n;i++){
+      var dz1=es[i]-es[i-1];
+      var s1=clamp(dx[i]>0.3 ? dz1/Math.max(dx[i],0.3) : 0, -0.3, 0.3);
+      v[i]=speedAtPower(P, p.mass*g*(s1+p.crr*Math.cos(Math.atan(s1))), k2, 1.0, vMax);
+    }
+    v[0]=v[1]||vFlat;
+    v=smooth(v,15);
+    for(i=1;i<n;i++) dt[i]=dx[i]/Math.max(v[i],0.3);
+    dt[0]=1;
+  }
+
+  var wh=new Float64Array(n),cum=new Float64Array(n);
+  for(i=1;i<n;i++){
+    var dz=es[i]-es[i-1];
+    var slope=clamp(dx[i]>0.3 ? dz/Math.max(dx[i],0.3) : 0, -0.3, 0.3);
+    var Fg=p.mass*g*slope;
+    var Fr=v[i]>0.5 ? p.crr*p.mass*g*Math.cos(Math.atan(slope)) : 0;
+    var Fa=k2*v[i]*v[i];
+    var Fi=tr.hasTime ? clamp(p.mass*(v[i]-v[i-1])/dt[i],-500,500) : 0;
+    var Pw=Math.max((Fg+Fr+Fa+Fi)*v[i],0);
+    wh[i]=Pw*dt[i]/3600;
+    cum[i]=cum[i-1]+wh[i];
+  }
+  return {dist:dist,es:es,cum:cum,v:v,dt:dt,rho:rho,synthetic:!tr.hasTime};
+}
+
+function idxAt(dist,km){
+  var lo=0,hi=dist.length-1,m=km*1000;
+  while(lo<hi){ var mid=(lo+hi)>>1; if(dist[mid]<m) lo=mid+1; else hi=mid; }
+  return lo;
+}
+
+/* dobíjanie zadané prúdom: Wh = U_nab x I x t, U_nab ~ 1,05 x U_nom */
+function chargeGain(c,p){
+  return Math.max(0, p.volt*1.05*c.amps*(c.mins/60)/p.cap*100);
+}
+
+/* relatívne dobitia prevedie na absolútny stav pri danom k */
+function resolveCharges(M,k,chgs,p,start){
+  var ev=chgs.slice().sort(function(a,b){return a.km-b.km;});
+  var base=(start==null?100:start), ref=0, out=[];
+  for(var i=0;i<ev.length;i++){
+    var e=ev[i], idx=idxAt(M.dist,e.km);
+    var before=base-(M.cum[idx]-ref)/k;
+    var pct = (e.pct!=null) ? e.pct : clamp(before+chargeGain(e,p),0,100);
+    out.push({km:e.km,pct:pct,before:before,added:pct-before});
+    base=pct; ref=M.cum[idx];
+  }
+  return out;
+}
+
+function calibrate(M,cals,chgs,p,start){
+  var totalKm=M.dist[M.dist.length-1]/1000;
+  var crit=(p.crit==null?10:p.crit);
+  var known=[{km:0,pct:(start==null?100:start)}];
+  var i;
+  for(i=0;i<chgs.length;i++) known.push({km:chgs[i].km,pct:chgs[i].pct,charge:true});
+  for(i=0;i<cals.length;i++) if(cals[i].km>0) known.push({km:cals[i].km,pct:cals[i].pct});
+  known=known.filter(function(x){return x.km>=0&&x.km<=totalKm;})
+             .sort(function(a,b){return (a.km-b.km)||((b.charge?1:0)-(a.charge?1:0));});
+
+  // fyzikálne medze: motor sám nedodá viac než (kapacita/100 x účinnosť) na 1 %
+  var kMin=(p.cap/100)*p.eta;
+  var kMax=kMin/0.1;                 // podiel jazdca nad 90 % je nereálny
+  var minKm=Math.max(2, totalKm*0.05);
+
+  var raw=[];
+  for(i=1;i<known.length;i++){
+    var a=known[i-1], b=known[i];
+    if (b.charge) continue;
+    var used=a.pct-b.pct;
+    if (used<=0.5) continue;
+    var ia=idxAt(M.dist,a.km), ib=idxAt(M.dist,b.km);
+    var e=M.cum[ib]-M.cum[ia];
+    if (e<=0) continue;
+    raw.push({from:a.km,to:b.km,used:used,wh:e,km:b.km-a.km,drop:M.es[ib]-M.es[ia],
+              coarse:(b.pct<=crit || a.pct<=crit), endPct:b.pct});
+  }
+  for(i=0;i<raw.length;i++) flag(raw[i]);
+
+  // Úsek, z ktorého sa kalibrovať nedá, sa nezahodí — spojí sa so susedným.
+  // V dlhšom celku sa zjazd „utopí“ v celkovej práci a údaj zostane využitý.
+  function flag(s){
+    s.k=s.wh/s.used;
+    s.whPerKm = s.km>0 ? s.wh/s.km : 0;
+    s.tooLow = s.k < kMin;
+    s.tooHigh = s.k > kMax;
+    // v pásme pod rezervou má displej krok 5 %, takže na spoľahlivú kalibráciu
+    // treba úsek zhruba dvakrát dlhší než pri odčítaní po jednotkách
+    s.short = s.km < (s.coarse ? minKm*2 : minKm);
+    s.descent = s.tooLow && s.drop < -50 && s.whPerKm < 12;
+    return s;
+  }
+  function absorb(a,b){
+    a.wh+=b.wh; a.used+=b.used; a.km+=b.km; a.drop+=b.drop; a.to=b.to;
+    a.coarse=a.coarse||b.coarse; a.endPct=b.endPct;
+    a.merged=(a.merged||0)+1;
+    a.absorbed=(a.absorbed||[]).concat([b.from]);
+    return flag(a);
+  }
+  function copy(s){
+    return {from:s.from,to:s.to,used:s.used,wh:s.wh,km:s.km,drop:s.drop,
+            k:s.k,whPerKm:s.whPerKm,tooLow:s.tooLow,tooHigh:s.tooHigh,
+            short:s.short,descent:s.descent,coarse:s.coarse,endPct:s.endPct};
+  }
+  var merged=[], j;
+  for(j=0;j<raw.length;j++){
+    var cur=raw[j];
+    if((cur.tooLow||cur.tooHigh) && merged.length) absorb(merged[merged.length-1],cur);
+    else merged.push(copy(cur));
+  }
+  while(merged.length>1 && (merged[0].tooLow||merged[0].tooHigh)){
+    var head=merged.shift();
+    merged[0]=absorb(head,copy(merged[0]));
+  }
+
+  var good=merged.filter(function(s){ return !s.tooLow && !s.tooHigh; });
+  if (good.length){
+    var sw=0,su=0,ks=[],w;
+    for(i=0;i<good.length;i++){
+      // odčítanie z pásma pod rezervou má krok 5 %, teda ±2,5 % neistoty — váži polovicou
+      w = good[i].coarse ? 0.5 : 1;
+      sw+=good[i].wh*w; su+=good[i].used*w; ks.push(good[i].k);
+    }
+    var k=sw/su;
+    var spread = good.length>1 ? (Math.max.apply(null,ks)-Math.min.apply(null,ks))/k*100 : null;
+    return {k:k,segs:merged,raw:raw,used:good,spread:spread,mode:"kalibrovaný",
+            kMin:kMin,kMax:kMax,minKm:minKm,dropped:merged.length-good.length};
+  }
+  return {k:kMin/(1-p.rider), segs:merged, raw:raw, used:[], spread:null, mode:"odhadovaný",
+          kMin:kMin,kMax:kMax,minKm:minKm,dropped:merged.length};
+}
+
+function socCurve(M,k,chgs,start){
+  var n=M.dist.length, soc=new Float64Array(n);
+  var ev=chgs.slice().sort(function(a,b){return a.km-b.km;});
+  var ei=0, ref=0, base=(start==null?100:start);
+  for(var i=0;i<n;i++){
+    while(ei<ev.length && M.dist[i]>=ev[ei].km*1000){ base=ev[ei].pct; ref=M.cum[i]; ei++; }
+    soc[i]=base-(M.cum[i]-ref)/k;
+  }
+  return soc;
+}
+
+/* ---------- graf ---------- */
+function chart(M,soc,cals,chgs,zero,narrow,lim){
+  var W=1000,H=narrow?620:530,L=narrow?78:58,Rr=16,T=14,B=narrow?50:36;
+  var fs=narrow?2.05:1.15, sw=narrow?2.1:1.25;
+  var crit=(lim&&lim.crit!=null)?lim.crit:10, dead=(lim&&lim.dead!=null)?lim.dead:5;
+  var gap=16, hTop=(H-T-B-gap)*0.34, hBot=(H-T-B-gap)-hTop;
+  var n=M.dist.length,total=M.dist[n-1],i;
+  var eMin=Infinity,eMax=-Infinity,sMinRaw=Infinity;
+  for(i=0;i<n;i++){ if(M.es[i]<eMin)eMin=M.es[i]; if(M.es[i]>eMax)eMax=M.es[i]; if(soc[i]<sMinRaw)sMinRaw=soc[i]; }
+  var eLo=eMin-25,eHi=eMax+45;
+  var sMin=Math.min(-12,Math.floor(sMinRaw/10)*10), sMax=104;
+  var X=function(d){ return L+(d/total)*(W-L-Rr); };
+  var Ye=function(e){ return T+hTop-((e-eLo)/(eHi-eLo))*hTop; };
+  var Ys=function(s){ return T+hTop+gap+hBot-((s-sMin)/(sMax-sMin))*hBot; };
+  var step=Math.max(1,Math.floor(n/900));
+
+  var terr="M "+X(0)+" "+Ye(M.es[0]);
+  for(i=step;i<n;i+=step) terr+=" L "+X(M.dist[i])+" "+Ye(M.es[i]);
+  terr+=" L "+X(total)+" "+(T+hTop)+" L "+L+" "+(T+hTop)+" Z";
+
+  var up="",dn="",upOn=false,dnOn=false;
+  for(i=0;i<n;i+=step){
+    var x=X(M.dist[i]), y=Ys(Math.max(soc[i],sMin));
+    if(soc[i]>=0){ up+=(upOn?" L ":" M ")+x+" "+y; upOn=true; dnOn=false; }
+    else { dn+=(dnOn?" L ":" M ")+x+" "+y; dnOn=true; upOn=false; }
+  }
+  var kmStep=total>60000?10:(total>25000?5:2), ticks=[];
+  for(var km=0;km*1000<=total;km+=kmStep) ticks.push(km);
+
+  var marks=[];
+  for(i=0;i<cals.length;i++) marks.push({km:cals[i].km,pct:cals[i].pct,t:"cal"});
+  for(i=0;i<chgs.length;i++) marks.push({km:chgs[i].km,pct:chgs[i].pct,t:"chg"});
+
+  var s="";
+  s+='<path d="'+terr+'" fill="var(--contour-soft)" opacity=".55"/>';
+  s+='<path d="'+terr+'" fill="none" stroke="var(--contour)" stroke-width="'+(1.2*sw)+'"/>';
+  [eMin,(eMin+eMax)/2,eMax].forEach(function(e){
+    s+='<line x1="'+L+'" y1="'+Ye(e)+'" x2="'+(W-Rr)+'" y2="'+Ye(e)+'" stroke="var(--contour)" stroke-width="'+(0.6*sw)+'" opacity=".45" stroke-dasharray="3 4"/>';
+    s+='<text x="'+(L-7)+'" y="'+(Ye(e)+3.5*fs)+'" text-anchor="end" font-size="'+(10.5*fs)+'" font-family="var(--font-data)" fill="var(--ink-soft)">'+Math.round(e)+'</text>';
+  });
+  s+='<text x="'+(L-7)+'" y="'+(T+11*fs)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-family="var(--font-map)" fill="var(--ink-soft)" letter-spacing="1.4">M n.m.</text>';
+  /* pásmo rezervy (displej už skáče po 5 %) a pásmo kritických percent */
+  if(crit>dead){
+    s+='<rect x="'+L+'" y="'+Ys(crit)+'" width="'+(W-L-Rr)+'" height="'+(Ys(dead)-Ys(crit))+'" fill="var(--contour)" opacity=".28"/>';
+    s+='<line x1="'+L+'" y1="'+Ys(crit)+'" x2="'+(W-Rr)+'" y2="'+Ys(crit)+'" stroke="var(--contour)" stroke-width="'+(1.6*sw)+'" stroke-dasharray="8 5"/>';
+    s+='<text x="'+(W-Rr-4)+'" y="'+(Ys(crit)-5*fs)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-weight="700" font-family="var(--font-map)" fill="var(--ink)" letter-spacing="1.2">REZERVA '+Math.round(crit)+' %</text>';
+  }
+  s+='<rect x="'+L+'" y="'+Ys(dead)+'" width="'+(W-L-Rr)+'" height="'+(Ys(sMin)-Ys(dead))+'" fill="var(--crit)" opacity=".18"/>';
+  s+='<line x1="'+L+'" y1="'+Ys(dead)+'" x2="'+(W-Rr)+'" y2="'+Ys(dead)+'" stroke="var(--crit)" stroke-width="'+(2*sw)+'"/>';
+  s+='<text x="'+(W-Rr-4)+'" y="'+(Ys(dead)+13*fs)+'" text-anchor="end" font-size="'+(10*fs)+'" font-weight="700" font-family="var(--font-map)" fill="var(--crit)" letter-spacing="1.2">KRITICKÝCH '+Math.round(dead)+' %</text>';
+
+  [0,25,50,75,100].forEach(function(v){
+    s+='<line x1="'+L+'" y1="'+Ys(v)+'" x2="'+(W-Rr)+'" y2="'+Ys(v)+'" stroke="var(--rule)" stroke-width="'+((v===0?1.2:0.6)*sw)+'"/>';
+    s+='<text x="'+(L-7)+'" y="'+(Ys(v)+3.5*fs)+'" text-anchor="end" font-size="'+(10.5*fs)+'" font-weight="700" font-family="var(--font-data)" fill="var(--ink)">'+v+'</text>';
+  });
+  s+='<text x="'+(L-7)+'" y="'+(Ys(100)-9*fs)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-family="var(--font-map)" fill="var(--ink-soft)" letter-spacing="1.4">%</text>';
+  ticks.forEach(function(km){
+    s+='<line x1="'+X(km*1000)+'" y1="'+(H-B)+'" x2="'+X(km*1000)+'" y2="'+(H-B+5)+'" stroke="var(--ink-soft)" stroke-width="'+(0.9*sw)+'"/>';
+    s+='<text x="'+X(km*1000)+'" y="'+(H-B+18*fs)+'" text-anchor="middle" font-size="'+(10.5*fs)+'" font-family="var(--font-data)" fill="var(--ink-soft)">'+km+'</text>';
+  });
+  s+='<text x="'+(W-Rr)+'" y="'+(H-6)+'" text-anchor="end" font-size="'+(9.5*fs)+'" font-family="var(--font-map)" fill="var(--ink-soft)" letter-spacing="1.4">KM</text>';
+  if(dn) s+='<path d="'+dn+'" fill="none" stroke="var(--drain)" stroke-width="'+(2*sw)+'" stroke-dasharray="5 3"/>';
+  s+='<path d="'+up+'" fill="none" stroke="var(--charge)" stroke-width="'+(2.4*sw)+'" stroke-linejoin="round"/>';
+  marks.forEach(function(m){
+    var idx=idxAt(M.dist,m.km), x=X(M.dist[idx]), y=Ys(m.pct);
+    var col=m.t==="chg"?"var(--water)":"var(--drain)";
+    s+='<circle cx="'+x+'" cy="'+y+'" r="'+(4.5*fs)+'" fill="'+col+'" stroke="var(--sheet-2)" stroke-width="'+(1.4*sw)+'"/>';
+    s+='<text x="'+x+'" y="'+(y-10*fs)+'" text-anchor="middle" font-size="'+(10*fs)+'" font-family="var(--font-data)" fill="'+col+'">'+Math.round(m.pct)+'%</text>';
+  });
+  if(lim&&lim.critPt){
+    s+='<line x1="'+X(lim.critPt.m)+'" y1="'+(T+hTop+gap)+'" x2="'+X(lim.critPt.m)+'" y2="'+(H-B)+'" stroke="var(--contour)" stroke-width="'+(1.4*sw)+'" stroke-dasharray="6 5"/>';
+    s+='<circle cx="'+X(lim.critPt.m)+'" cy="'+Ys(crit)+'" r="'+(4*fs)+'" fill="var(--contour)" stroke="var(--sheet-2)" stroke-width="'+(1.4*sw)+'"/>';
+  }
+  if(lim&&lim.deadPt){
+    s+='<line x1="'+X(lim.deadPt.m)+'" y1="'+T+'" x2="'+X(lim.deadPt.m)+'" y2="'+(H-B)+'" stroke="var(--crit)" stroke-width="'+(1.8*sw)+'" stroke-dasharray="3 4"/>';
+    s+='<path d="M '+X(lim.deadPt.m)+' '+(Ys(dead)-1)+' l '+(-7*fs)+' '+(-12*fs)+' l '+(14*fs)+' 0 Z" fill="var(--crit)"/>';
+    s+='<text x="'+X(lim.deadPt.m)+'" y="'+(Ys(dead)-15*fs)+'" text-anchor="middle" font-size="'+(11.5*fs)+'" font-family="var(--font-data)" font-weight="800" fill="var(--crit)">'+fmt(lim.deadPt.m/1000)+' km</text>';
+  }
+  if(zero){
+    s+='<line x1="'+X(zero.m)+'" y1="'+T+'" x2="'+X(zero.m)+'" y2="'+(H-B)+'" stroke="var(--drain)" stroke-width="'+sw+'" stroke-dasharray="2 4"/>';
+    s+='<path d="M '+X(zero.m)+' '+(Ys(0)-1)+' l '+(-6.5*fs)+' '+(-11*fs)+' l '+(13*fs)+' 0 Z" fill="var(--drain)"/>';
+    s+='<text x="'+X(zero.m)+'" y="'+(Ys(0)+16*fs)+'" text-anchor="middle" font-size="'+(11.5*fs)+'" font-family="var(--font-data)" font-weight="800" fill="var(--drain)">'+fmt(zero.m/1000)+' km</text>';
+  }
+  return '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Profil trasy a zostatku batérie">'+s+'</svg>';
+}
+
+/* ---------- výstup ---------- */
+function render(tr,p,cals,chgsIn){
+  var M=model(tr,p), i;
+  // odčítanie na 0 km má prednosť pred poľom „stav na štarte“
+  var start=p.socStart;
+  for(i=0;i<cals.length;i++) if(cals[i].km<=0) start=cals[i].pct;
+  start=clamp(start,1,100);
+  var k0=(p.cap/100)*p.eta/(1-p.rider);
+  var chgs=resolveCharges(M,k0,chgsIn,p,start);
+  var C=calibrate(M,cals,chgs,p,start);
+  chgs=resolveCharges(M,C.k,chgsIn,p,start);
+  C=calibrate(M,cals,chgs,p,start);
+  var soc=socCurve(M,C.k,chgs,start);
+  var n=M.dist.length,total=M.dist[n-1];
+
+  var crit=(p.crit==null?10:p.crit), dead=(p.dead==null?5:p.dead);
+  var mark=function(level){
+    for(var j=0;j<n;j++) if(soc[j]<=level)
+      return {m:M.dist[j],ele:M.es[j],lat:tr.lat[j],lon:tr.lon[j],idx:j};
+    return null;
+  };
+  var zero=mark(0), critPt=mark(crit), deadPt=mark(dead);
+
+  var gain=0;
+  for(i=1;i<n;i++){ var d=M.es[i]-M.es[i-1]; if(d>0) gain+=d; }
+  var hours=0; for(i=1;i<n;i++) hours+=M.dt[i]; hours/=3600;
+  var riderShare = C.mode==="kalibrovaný" ? (1-(p.cap/100)*p.eta/C.k)*100 : p.rider*100;
+  var narrow = window.innerWidth < 760;
+
+  var rows=[], kmStep=total>50000?5:(total>20000?2:1);
+  // dojazd z priemernej spotreby na poslednom úseku (tak, ako ho počíta zobrazovač)
+  var win=Math.min(5000, Math.max(1000, total*0.2));
+  // dojazd sa počíta po kritickú hodnotu, nie po nulu — pod ňou sa už na batériu spoľahnúť nedá
+  var rangeAt=function(idx){
+    if(soc[idx]<=dead) return 0;
+    var back=M.dist[idx]-win;
+    if(back<0) back=0;
+    var j=idxAt(M.dist,back/1000);
+    var dd=M.dist[idx]-M.dist[j], dw=M.cum[idx]-M.cum[j];
+    if(dd<200 || dw<=0) return null;
+    var whPerKm=dw/(dd/1000);
+    return (soc[idx]-dead)*C.k/whPerKm;
+  };
+  var fmtRange=function(r){
+    if(r===null) return "—";
+    if(r>300) return "&gt;300";
+    return Math.round(r);
+  };
+  // čo v tom mieste ukáže zobrazovač: pod rezervou už len 5 % a 0 %
+  var shown=function(v){
+    if(v<=0) return 0;
+    if(v>crit) return Math.round(v);
+    return v>=dead ? Math.round(dead) : 0;
+  };
+  var pushRow=function(idx,label){
+    var v=soc[idx];
+    var cls = v<=dead ? 'dead' : (v<=crit ? 'crit' : '');
+    var pct = Math.round(v);
+    var disp = (v<=crit && v>0) ? ' <small>(displej '+shown(v)+' %)</small>' : '';
+    rows.push('<tr class="'+cls+'"><td>'+label+'</td><td>'+Math.round(M.es[idx])+'</td>'
+      +'<td>'+pct+disp+'</td>'
+      +'<td>'+fmtRange(rangeAt(idx))+'</td></tr>');
+  };
+  for(var km=0;km*1000<=total;km+=kmStep) pushRow(idxAt(M.dist,km),String(km));
+  pushRow(n-1,fmt(total/1000));
+
+  var segTable="";
+  if (C.segs.length){
+    segTable='<div class="tw"><table><caption>Kalibračné úseky</caption><thead><tr><th>Úsek</th>'
+      +'<th>Mech. práca</th><th>Spotreba</th><th>Wh na 1 %</th><th>Stav</th></tr></thead><tbody>'
+      +C.segs.map(function(s){
+        var st = s.merged ? '<span style="color:var(--water)">spojený</span>'
+               : s.tooLow ? '<span style="color:var(--drain)">nemožný</span>'
+               : s.tooHigh ? '<span style="color:var(--drain)">nereálny</span>'
+               : s.short ? '<span style="color:var(--contour)">krátky</span>'
+               : s.coarse ? '<span style="color:var(--contour)">hrubý (pod rezervou)</span>' : 'v poriadku';
+        return '<tr><td>'+fmt(s.from)+' – '+fmt(s.to)+' km</td><td>'+Math.round(s.wh)+' Wh</td><td>'
+          +Math.round(s.used)+' %</td><td>'+fmt(s.k,2)+'</td><td>'+st+'</td></tr>'; }).join("")
+      +'</tbody></table></div>';
+  }
+
+  var notes="";
+  var rawDesc=C.raw.filter(function(s){ return s.descent; });
+  var rawBad=C.raw.filter(function(s){ return (s.tooLow&&!s.descent)||s.tooHigh; });
+  var mergedSegs=C.segs.filter(function(s){ return s.merged; });
+  if (mergedSegs.length){
+    var m0=mergedSegs[0];
+    notes+='<p class="note">Odčítanie na '+mergedSegs.map(function(s){
+        return s.absorbed.map(function(x){return fmt(x)+' km';}).join(", "); }).join(", ")
+      +' nešlo použiť samostatne'
+      +(rawDesc.length ? ' — úsek za ním klesá o '+Math.round(rawDesc[0].drop)+' m a model v ňom '
+        +'napočítal len '+fmt(rawDesc[0].whPerKm)+' Wh na kilometer. Na zjazde koná prácu gravitácia, '
+        +'nie motor.' : ', vyšlo by z neho menej práce, než dodá samotný motor.')
+      +' Spojil som ho preto so susedným úsekom, takže z neho vznikol celok '
+      +fmt(m0.from)+' – '+fmt(m0.to)+' km s '+fmt(m0.k,2)+' Wh na 1 %. Údaj tak zostal využitý '
+      +'a zjazd sa v dlhšom celku stratí.</p>';
+  }
+  if (rawBad.length && !mergedSegs.length){
+    notes+='<p class="note err">Odčítanie na '+rawBad.map(function(s){return fmt(s.to)+' km';}).join(", ")
+      +' nemôže platiť. Vyplýva z neho '+fmt(rawBad[0].k,2)+' Wh mechanickej práce na 1 % batérie, '
+      +'pričom samotný motor jej z 1 % dodá '+fmt(C.kMin,2)+' Wh. Nemám ho s čím spojiť, '
+      +'preto počítam z odhadu podielu jazdca.</p>';
+  }
+  var shorts=C.used.filter(function(s){ return s.short; });
+  if (shorts.length)
+    notes+='<p class="note">Úsek '+shorts.map(function(s){return fmt(s.from)+' – '+fmt(s.to)+' km';}).join(", ")
+      +' je na kalibráciu krátky (pod '+fmt(C.minKm)+' km). Zobrazovač ukazuje percentá po skokoch, '
+      +'takže na takej vzdialenosti prevláda zaokrúhlenie nad skutočnou spotrebou. Odčítajte radšej '
+      +'po dlhšom úseku.</p>';
+  var coarseSegs=C.used.filter(function(s){ return s.coarse; });
+  if (coarseSegs.length)
+    notes+='<p class="note">Odčítanie na '+coarseSegs.map(function(s){return fmt(s.to)+' km';}).join(", ")
+      +' padlo pod rezervu '+Math.round(crit)+' %, kde zobrazovač ukazuje už len '+Math.round(dead)
+      +' % a 0 %. Skutočná hodnota je v pásme ±'+fmt(dead/2)+' %, preto som takému odčítaniu dal '
+      +'polovičnú váhu. Na presnú kalibráciu odčítavajte radšej nad rezervou.</p>';
+  if (M.synthetic)
+    notes+='<p class="note">Trasa nemá časové značky, takže rýchlosť je dopočítaná z rovnováhy síl pri '
+      +'rovinnej rýchlosti '+Math.round(p.vFlat)+' km/h. Práca proti gravitácii a valivému odporu tým '
+      +'dotknutá nie je — tie závisia len od vzdialenosti a prevýšenia. Neistý je iba odpor vzduchu.</p>';
+  var relCharges=chgs.filter(function(c){return c.added!=null && chgsIn.some(function(x){return x.km===c.km && x.pct==null;});});
+  if (relCharges.length)
+    notes+='<p class="note">Dobíjanie z nabíjačky: '+relCharges.map(function(c){
+      return Math.round(c.before)+' % → '+Math.round(c.pct)+' % pri '+fmt(c.km)+' km'; }).join(", ")
+      +'. Počítané z napätia '+p.volt+' V; skutočné napätie packu počas nabíjania kolíše, takže berte ±10 %.</p>';
+  if (C.mode==="odhadovaný")
+    notes+='<p class="note">Bez odčítaní batérie ide o odhad z predpokladaného podielu jazdca ('
+      +Math.round(p.rider*100)+' %) a účinnosti pohonu. Jediné odčítanie z reálnej jazdy zúži chybu na tretinu.</p>';
+  if (C.spread!==null && C.spread>12)
+    notes+='<p class="note err">Kalibračné úseky si odporujú o '+Math.round(C.spread)+' %. Na trase sa '
+      +'pravdepodobne menil režim asistencie. Výsledok berte ako pásmo, nie ako jedno číslo.</p>';
+  else if (C.spread!==null)
+    notes+='<p class="note">Rozptyl medzi kalibračnými úsekmi je '+Math.round(C.spread)+' %, čo znamená '
+      +'konzistentný režim asistencie po celej trase.</p>';
+  if (riderShare<0)
+    notes+='<p class="note err">Model vyžaduje záporný podiel jazdca — kapacita, hmotnosť alebo odpory '
+      +'nesedia. Skontrolujte najmä celkovú hmotnosť a Crr.</p>';
+
+  $("#stage").innerHTML=
+    '<figure><figcaption><span>'+(tr.name||"Profil trasy")+'</span><em>'+fmt(total/1000)+' km · '
+      +Math.round(gain)+' m · '+(M.synthetic?"plán":"záznam")+' · '+C.mode+'</em></figcaption>'
+      +chart(M,soc,cals,chgs,zero,narrow,{crit:crit,dead:dead,critPt:critPt,deadPt:deadPt})+'</figure>'
+    +'<div class="stats">'
+      +'<div class="stat'+(deadPt?' danger':'')+'"><div class="k">Kritických '+Math.round(dead)+' % pri</div><div class="v">'
+        +(deadPt?fmt(deadPt.m/1000)+' <small>km</small>':'—')+'</div></div>'
+      +(crit>dead
+        ? '<div class="stat'+(critPt&&!deadPt?' danger':'')+'"><div class="k">Rezerva '+Math.round(crit)+' % pri</div><div class="v">'
+          +(critPt?fmt(critPt.m/1000)+' <small>km</small>':'—')+'</div></div>'
+        : '')
+      +'<div class="stat"><div class="k">Batéria na nule</div><div class="v">'+(zero?fmt(zero.m/1000)+' <small>km</small>':'—')+'</div></div>'
+      +'<div class="stat'+(soc[n-1]<=crit?' danger':'')+'"><div class="k">Zostatok v cieli</div><div class="v">'+Math.max(Math.round(soc[n-1]),0)+' <small>%</small></div></div>'
+      +'<div class="stat"><div class="k">Wh na 1 %</div><div class="v">'+fmt(C.k,2)+'</div></div>'
+      +'<div class="stat"><div class="k">Podiel jazdca</div><div class="v">'+Math.round(riderShare)+' <small>%</small></div></div>'
+      +'<div class="stat"><div class="k">Priemer</div><div class="v">'+fmt(total/1000/hours)+' <small>km/h</small></div></div>'
+    +'</div>'
+    +(deadPt
+      ? '<p class="note crit-note">Kritická hranica '+Math.round(dead)+' % nastane pri '+fmt(deadPt.m/1000)
+        +' km, v nadmorskej výške '+Math.round(deadPt.ele)+' m ('+deadPt.lat.toFixed(5)+' N, '
+        +deadPt.lon.toFixed(5)+' E). Do konca trasy odtiaľ zostáva '+fmt(total/1000-deadPt.m/1000)
+        +' km. Odtiaľto počítajte s dojazdom bez asistencie'
+        +(zero ? '; úplná nula pripadne na '+fmt(zero.m/1000)+' km, ale tých posledných '+Math.round(dead)
+                 +' % je už len teoretických.' : '.')
+        +'</p>'
+      : critPt
+      ? '<p class="note crit-note">Batéria klesne do rezervy '+Math.round(crit)+' % pri '+fmt(critPt.m/1000)
+        +' km — odtiaľ už zobrazovač ukazuje len '+Math.round(dead)+' % a 0 %. Kritickú hranicu '
+        +Math.round(dead)+' % na tejto trase nedosiahne, v cieli zostáva '+Math.round(soc[n-1])+' %.</p>'
+      : '<p class="note">Batéria na tejto trase nedosiahne ani rezervu '+Math.round(crit)+' %. V cieli zostáva '
+        +Math.round(soc[n-1])+' %, teda asi '+Math.round(soc[n-1]*p.cap/100)+' Wh, z toho použiteľných '
+        +Math.round(Math.max(soc[n-1]-dead,0)*p.cap/100)+' Wh nad kritickou hranicou.</p>')
+    +notes+segTable
+    +'<div class="tw"><table><caption>Priebeh po trase</caption><thead><tr><th>Km</th><th>Výška [m]</th>'
+    +'<th>Zostatok [%]</th><th>Dojazd do '+Math.round(dead)+' % [km]</th></tr></thead><tbody>'+rows.join("")+'</tbody></table></div>'
+    +'<p class="hint" style="margin-top:-14px">Dojazd je odhad zo spotreby na poslednom úseku dlhom '
+    +fmt(win/1000)+' km, teda tak, ako ho počíta zobrazovač na bicykli — v stúpaní klesá a na zjazde '
+    +'rastie. Počíta sa po kritickú hranicu '+Math.round(dead)+' %, nie po nulu. Riadky pod rezervou '
+    +Math.round(crit)+' % sú zvýraznené a v zátvorke je hodnota, ktorú v tom mieste ukáže zobrazovač. '
+    +'Ako ďaleko dôjdete po tejto trase hovorí bod kritickej hranice vyššie, nie tento stĺpec.</p>';
+}
+
+/* ---------- riadky ---------- */
+function calRow(km,pct){
+  var d=document.createElement("div");
+  d.className="pt c2";
+  d.innerHTML='<input type="number" step="0.1" inputmode="decimal" placeholder="km" value="'+(km==null?"":km)+'">'
+    +'<input type="number" step="1" inputmode="decimal" placeholder="% zostatok" value="'+(pct==null?"":pct)+'">'
+    +'<button type="button" aria-label="Odstrániť riadok">&times;</button>';
+  d.querySelector("button").onclick=function(){ d.remove(); };
+  return d;
+}
+function chgRow(mode,vals){
+  vals=vals||{};
+  var d=document.createElement("div");
+  d.className="pt "+(mode==="amp"?"c3":"c2");
+  var v=function(x){ return x==null?"":x; };
+  d.innerHTML='<input type="number" step="0.1" inputmode="decimal" placeholder="km" value="'+v(vals.km)+'">'
+    +(mode==="amp"
+      ? '<input type="number" step="0.5" inputmode="decimal" placeholder="A" value="'+v(vals.amps)+'">'
+        +'<input type="number" step="5" inputmode="decimal" placeholder="min" value="'+v(vals.mins)+'">'
+      : '<input type="number" step="1" inputmode="decimal" placeholder="% po dobití" value="'+v(vals.pct)+'">')
+    +'<button type="button" aria-label="Odstrániť riadok">&times;</button>';
+  d.querySelector("button").onclick=function(){ d.remove(); };
+  return d;
+}
+function readCals(){
+  return Array.prototype.map.call($("#cals").querySelectorAll(".pt"),function(r){
+    var i=r.querySelectorAll("input");
+    return {km:parseFloat(i[0].value), pct:parseFloat(i[1].value)};
+  }).filter(function(x){ return isFinite(x.km)&&isFinite(x.pct); });
+}
+function readChgs(){
+  var mode=$("#chgMode").value;
+  return Array.prototype.map.call($("#chgs").querySelectorAll(".pt"),function(r){
+    var i=r.querySelectorAll("input"), km=parseFloat(i[0].value);
+    if (mode==="amp") return {km:km, amps:parseFloat(i[1].value), mins:parseFloat(i[2].value), pct:null};
+    return {km:km, pct:parseFloat(i[1].value)};
+  }).filter(function(x){
+    return isFinite(x.km) && (x.pct!=null&&isFinite(x.pct) || (isFinite(x.amps)&&isFinite(x.mins)));
+  });
+}
+
+$("#addCal").onclick=function(){ $("#cals").appendChild(calRow()); };
+$("#addChg").onclick=function(){ $("#chgs").appendChild(chgRow($("#chgMode").value)); };
+$("#cals").appendChild(calRow());
+
+$("#chgMode").onchange=function(){
+  var mode=this.value;
+  var keep=Array.prototype.map.call($("#chgs").querySelectorAll(".pt"),function(r){
+    return {km:r.querySelectorAll("input")[0].value};
+  });
+  $("#chgs").innerHTML="";
+  keep.forEach(function(v){ $("#chgs").appendChild(chgRow(mode,{km:v.km})); });
+  $("#chgHint").textContent = mode==="amp"
+    ? "Km zastávky, prúd nabíjačky a čas nabíjania. Percentá sa dopočítajú z napätia batérie."
+    : "Km zastávky a stav batérie po dobití v %.";
+};
+
+/* ---------- súbor ---------- */
+function acceptTrack(text,fallbackName){
+  try{
+    TRACK=parseGPX(String(text));
+    var M=model(TRACK,{mass:100,crr:0.01,cda:0.5,temp:27,vFlat:25,vMax:50});
+    var km=M.dist[M.dist.length-1]/1000;
+    $("#dropName").textContent=TRACK.name||fallbackName||"Trasa načítaná";
+    $("#dropInfo").textContent=TRACK.n.toLocaleString("sk-SK")+" bodov · "+fmt(km)+" km · "
+      +(TRACK.hasTime?"záznam jazdy":"plán, bez časov");
+    $("#planSect").style.opacity=TRACK.hasTime?"0.45":"1";
+    $("#go").disabled=false;
+    return true;
+  }catch(e){
+    TRACK=null; $("#go").disabled=true;
+    $("#dropName").textContent="Súbor sa nedá použiť";
+    $("#dropInfo").textContent=e.message;
+    return false;
+  }
+}
+function loadFile(f){
+  if(!f) return;
+  var fr=new FileReader();
+  fr.onload=function(){ acceptTrack(fr.result,f.name); };
+  fr.onerror=function(){
+    TRACK=null; $("#go").disabled=true;
+    $("#dropName").textContent="Súbor sa nepodarilo načítať";
+    $("#dropInfo").textContent="Skúste ho najprv stiahnuť do zariadenia.";
+  };
+  fr.readAsText(f);
+}
+$("#pasteToggle").onclick=function(){
+  var b=$("#pasteBox");
+  b.hidden=!b.hidden;
+  if(!b.hidden) $("#pasteArea").focus();
+};
+$("#pasteLoad").onclick=function(){
+  var t=$("#pasteArea").value.trim();
+  if(!t){ $("#dropInfo").textContent="Textové pole je prázdne."; return; }
+  if(acceptTrack(t,"Vložený text")) $("#pasteBox").hidden=true;
+};
+$("#drop").onclick=function(){ $("#file").click(); };
+$("#drop").onkeydown=function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("#file").click(); } };
+$("#file").onchange=function(e){ loadFile(e.target.files[0]); };
+
+/* Drag & drop.
+   Pretiahnutie musí mať zrušené predvolené správanie na celom dokumente, inak si prehliadač
+   súbor otvorí sám. Okrem súboru vieme prijať aj text alebo odkaz — presne to totiž pošle
+   pretiahnutie zo stránky namiesto skutočného súboru. */
+function dtFile(dt){
+  if(!dt) return null;
+  if(dt.files && dt.files.length) return dt.files[0];
+  if(dt.items){
+    for(var i=0;i<dt.items.length;i++)
+      if(dt.items[i].kind==="file"){ var f=dt.items[i].getAsFile(); if(f) return f; }
+  }
+  return null;
+}
+function dtText(dt){
+  if(!dt || !dt.getData) return "";
+  var keys=["text/plain","text/uri-list","URL","Text",""], i, v;
+  for(i=0;i<keys.length;i++){
+    try{ v=dt.getData(keys[i]); }catch(e){ v=""; }
+    if(v) return v.trim();
+  }
+  return "";
+}
+function say(name,info){
+  $("#dropName").textContent=name;
+  $("#dropInfo").textContent=info;
+}
+function fetchInto(url,label){
+  say("Načítavam…", url.length>70 ? url.slice(0,70)+"…" : url);
+  var done=false;
+  var fail=function(msg){ if(!done){ done=true; say("Obsah sa nepodarilo prečítať", msg); } };
+  try{
+    var xhr=new XMLHttpRequest();
+    xhr.open("GET",url,true);
+    xhr.onload=function(){
+      if(done) return;
+      if(xhr.responseText && xhr.responseText.indexOf("<trkpt")>-1){ done=true; acceptTrack(xhr.responseText,label); }
+      else fail("Odpoveď neobsahuje body trasy.");
+    };
+    xhr.onerror=function(){
+      fail("Prehliadač preniesol len cestu k súboru, nie jeho obsah, a priamy prístup na disk "
+        +"nepovolí. Vyberte súbor klepnutím na zónu.");
+    };
+    xhr.send();
+  }catch(e){
+    fail("Prehliadač preniesol len cestu k súboru, nie jeho obsah. Vyberte ho klepnutím na zónu.");
+  }
+}
+function handleDrop(e){
+  var dt=e.dataTransfer;
+  var f=dtFile(dt);
+  if(f){ loadFile(f); return; }
+  var t=dtText(dt);
+  if(!t){ say("Nič sa neprenieslo","Pretiahnite súbor .gpx z priečinka, alebo ho vyberte klepnutím."); return; }
+  if(t.indexOf("<gpx")>-1 || t.indexOf("<trkpt")>-1){ acceptTrack(t,"Pretiahnutý text"); return; }
+  t=t.split(/[\r\n]+/)[0].trim();
+  if(/^(https?|file):\/\//i.test(t)){
+    fetchInto(t, decodeURIComponent(t.split("/").pop()) || "Z odkazu");
+    return;
+  }
+  say("Neznámy obsah","Prenieslo sa: "+t.slice(0,60)+(t.length>60?"…":"")
+    +" — nie súbor GPX. Vyberte ho klepnutím na zónu.");
+}
+["dragenter","dragover","dragleave","drop","dragend"].forEach(function(t){
+  document.addEventListener(t,function(e){ e.preventDefault(); },false);
+});
+document.addEventListener("dragover",function(e){
+  if(e.dataTransfer) try{ e.dataTransfer.dropEffect="copy"; }catch(err){}
+  $("#drop").classList.add("over");
+},false);
+["dragleave","dragend","drop"].forEach(function(t){
+  document.addEventListener(t,function(e){
+    if(t!=="dragleave" || e.relatedTarget===null || !document.body.contains(e.relatedTarget))
+      $("#drop").classList.remove("over");
+  },false);
+});
+document.addEventListener("drop",handleDrop,false);
+
+$("#crrPre").onchange=function(){ if(this.value!=="custom") $("#crr").value=this.value; };
+$("#cdaPre").onchange=function(){ if(this.value!=="custom") $("#cda").value=this.value; };
+$("#crr").oninput=function(){ $("#crrPre").value="custom"; };
+$("#cda").oninput=function(){ $("#cdaPre").value="custom"; };
+
+/* ---------- profily jazdcov ---------- */
+var PROF_KEY="ebike.profiles.v1", LAST_KEY="ebike.lastProfile.v1";
+var PROF_FIELDS=["mRider","mBike","mGear","cap","volt","eta","socCrit","socDead"];
+
+function storeGet(key){
+  try{ return window.localStorage.getItem(key); }catch(e){ return null; }
+}
+function storeSet(key,val){
+  try{ window.localStorage.setItem(key,val); return true; }catch(e){ return false; }
+}
+function loadProfiles(){
+  var raw=storeGet(PROF_KEY);
+  if(!raw) return {};
+  try{ var o=JSON.parse(raw); return (o && typeof o==="object") ? o : {}; }catch(e){ return {}; }
+}
+function saveProfiles(o){
+  if(!storeSet(PROF_KEY,JSON.stringify(o))){
+    $("#profHint").textContent="Prehliadač neumožňuje ukladanie. Profily zostanú len do zavretia stránky "
+      +"— použite Vyviezť a text si uložte.";
+    return false;
+  }
+  return true;
+}
+function fillProfileSelect(sel){
+  var o=loadProfiles(), names=Object.keys(o).sort(), s=$("#profSel");
+  s.innerHTML='<option value="">— bez profilu —</option>';
+  names.forEach(function(nm){
+    var op=document.createElement("option");
+    op.value=nm; op.textContent=nm;
+    s.appendChild(op);
+  });
+  s.value = (sel && o[sel]) ? sel : "";
+}
+function applyProfile(nm){
+  var o=loadProfiles(), pr=o[nm];
+  if(!pr) return;
+  PROF_FIELDS.forEach(function(f){ if(pr[f]!=null) $("#"+f).value=pr[f]; });
+  $("#profName").value=nm;
+  storeSet(LAST_KEY,nm);
+}
+
+$("#profSel").onchange=function(){
+  if(this.value) applyProfile(this.value);
+  else $("#profName").value="";
+};
+$("#profSave").onclick=function(){
+  var nm=$("#profName").value.trim();
+  if(!nm){ $("#profHint").textContent="Zadajte názov profilu."; $("#profName").focus(); return; }
+  var o=loadProfiles(), pr={};
+  PROF_FIELDS.forEach(function(f){ pr[f]=$("#"+f).value; });
+  o[nm]=pr;
+  if(saveProfiles(o)){
+    storeSet(LAST_KEY,nm);
+    fillProfileSelect(nm);
+    $("#profHint").textContent="Profil „"+nm+"“ uložený.";
+  }
+};
+$("#profDel").onclick=function(){
+  var nm=$("#profSel").value || $("#profName").value.trim();
+  if(!nm){ $("#profHint").textContent="Najprv vyberte profil."; return; }
+  var o=loadProfiles();
+  if(!o[nm]){ $("#profHint").textContent="Taký profil neexistuje."; return; }
+  delete o[nm];
+  if(saveProfiles(o)){
+    fillProfileSelect("");
+    $("#profName").value="";
+    $("#profHint").textContent="Profil „"+nm+"“ zmazaný.";
+  }
+};
+$("#profExport").onclick=function(){
+  var b=$("#profBox");
+  b.hidden=false;
+  b.value=JSON.stringify(loadProfiles());
+  b.select();
+  $("#profHint").textContent="Skopírujte text a na druhom zariadení ho vložte cez Priniesť.";
+};
+$("#profImport").onclick=function(){
+  var b=$("#profBox");
+  if(b.hidden){ b.hidden=false; b.value=""; b.focus();
+    $("#profHint").textContent="Vložte vyvezený text a stlačte Priniesť znova."; return; }
+  var t=b.value.trim();
+  if(!t){ $("#profHint").textContent="Textové pole je prázdne."; return; }
+  try{
+    var inc=JSON.parse(t);
+    if(!inc || typeof inc!=="object") throw new Error("zlý formát");
+    var o=loadProfiles(), cnt=0;
+    for(var nm in inc) if(Object.prototype.hasOwnProperty.call(inc,nm)){ o[nm]=inc[nm]; cnt++; }
+    if(saveProfiles(o)){
+      fillProfileSelect("");
+      b.hidden=true; b.value="";
+      $("#profHint").textContent="Prinesené profily: "+cnt+".";
+    }
+  }catch(e){
+    $("#profHint").textContent="Text sa nepodarilo prečítať. Očakáva sa vyvezený obsah.";
+  }
+};
+
+fillProfileSelect(storeGet(LAST_KEY));
+if($("#profSel").value) applyProfile($("#profSel").value);
+
+/* ---------- režim na priame slnko ---------- */
+(function(){
+  var KEY="ebike.sun.v1", b=$("#sunBtn");
+  function set(on){
+    document.documentElement.setAttribute("data-sun", on?"1":"0");
+    b.setAttribute("aria-pressed", on?"true":"false");
+    b.textContent = on ? "☀ Späť" : "☀ Na slnko";
+    document.querySelector('meta[name=theme-color]').setAttribute("content", on?"#000000":"#101A14");
+    try{ window.localStorage.setItem(KEY, on?"1":"0"); }catch(e){}
+    if (LAST) render(LAST.tr,LAST.p,LAST.cals,LAST.chgs);
+  }
+  var saved=null;
+  try{ saved=window.localStorage.getItem(KEY); }catch(e){}
+  set(saved==="1");
+  b.onclick=function(){ set(document.documentElement.getAttribute("data-sun")!=="1"); };
+})();
+
+/* ---------- kontrola prostredia ---------- */
+(function(){
+  var framed=false;
+  try{ framed = window.self !== window.top; }catch(e){ framed=true; }
+  var storage=false;
+  try{ window.localStorage.setItem("ebike.test","1");
+       window.localStorage.removeItem("ebike.test"); storage=true; }catch(e){ storage=false; }
+  var files = !!(window.File && window.FileReader);
+  if (framed || !storage || !files){
+    var lst=[];
+    if (framed) lst.push("pretiahnutie súboru myšou nebude fungovať");
+    if (!storage) lst.push("profily jazdcov sa neuložia do ďalšieho otvorenia");
+    if (!files) lst.push("čítanie súborov je zakázané");
+    var box=document.createElement("div");
+    box.className="empty";
+    box.style.borderColor="var(--drain)";
+    box.style.textAlign="left";
+    box.innerHTML='<p style="max-width:60ch"><strong>Stránka beží v obmedzenom režime.</strong><br>'
+      +'Otvorili ste ju cez náhľad v cloudovom úložisku, ktoré ju z bezpečnostných dôvodov spúšťa '
+      +'v uzavretom rámci. Preto '+lst.join(", ")+'.<br><br>'
+      +'Súbor GPX vyberte klepnutím na zónu, prípadne použite vloženie obsahu. Ak chcete plnú '
+      +'funkčnosť, uložte si tento súbor do zariadenia a otvorte ho odtiaľ, alebo ho nechajte '
+      +'servírovať ako bežnú webovú stránku.</p>';
+    var st=$("#stage");
+    st.insertBefore(box, st.firstChild);
+    if (!storage)
+      $("#profHint").textContent="V tomto režime sa profily neuložia natrvalo. Použite Vyviezť "
+        +"a text si odložte.";
+  }
+})();
+
+/* ---------- reset ---------- */
+$("#reset").onclick=function(){
+  for (var id in DEF) if (Object.prototype.hasOwnProperty.call(DEF,id)) $("#"+id).value=DEF[id];
+  $("#crrPre").value="0.012"; $("#cdaPre").value="0.74"; $("#chgMode").value="pct";
+  $("#chgHint").textContent="Km zastávky a stav batérie po dobití v %.";
+  $("#cals").innerHTML=""; $("#cals").appendChild(calRow());
+  $("#chgs").innerHTML="";
+  $("#file").value=""; TRACK=null; LAST=null;
+  $("#pasteArea").value=""; $("#pasteBox").hidden=true;
+  $("#dropName").textContent="Vybrať súbor GPX";
+  $("#dropInfo").textContent="záznam jazdy alebo plánovaná trasa";
+  $("#planSect").style.opacity="1";
+  $("#go").disabled=true;
+  $("#stage").innerHTML='<div class="empty"><p>Zatiaľ nič na zobrazenie. Začnite nahraním súboru GPX — '
+    +'funguje záznam jazdy aj trasa z plánovača.</p></div>';
+  $("#profBox").hidden=true; $("#profBox").value="";
+  $("#profHint").textContent="Profil si zapamätá údaje z tejto sekcie a ponúkne ich pri ďalšom otvorení. "
+    +"Ukladá sa do tohto prehliadača — na inom zariadení použite Vyviezť a Priniesť.";
+  fillProfileSelect("");
+  $("#profName").value="";
+  window.scrollTo({top:0,behavior:"smooth"});
+};
+
+/* ---------- výpočet ---------- */
+$("#form").onsubmit=function(e){
+  e.preventDefault();
+  if(!TRACK) return;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  var num=function(id){ return parseFloat($(id).value)||0; };
+  var p={ mass:num("#mRider")+num("#mBike")+num("#mGear"), cap:num("#cap"), volt:num("#volt")||36,
+    crr:num("#crr"), cda:num("#cda"), temp:num("#temp"), eta:num("#eta")||0.78,
+    vFlat:num("#vFlat")||25, vMax:num("#vMax")||50, rider:clamp(num("#rider")/100,0,0.9),
+    socStart:clamp(num("#socStart")||100,1,100),
+    crit:clamp(isFinite(parseFloat($("#socCrit").value))?num("#socCrit"):10,0,40),
+    dead:clamp(isFinite(parseFloat($("#socDead").value))?num("#socDead"):5,0,20) };
+  if (p.dead>p.crit) p.crit=p.dead;
+  if(p.mass<=0||p.cap<=0){
+    $("#stage").innerHTML='<p class="note err">Hmotnosť aj kapacita musia byť väčšie ako nula.</p>'; return;
+  }
+  try{
+    var cals=readCals(), chgs=readChgs();
+    LAST={tr:TRACK,p:p,cals:cals,chgs:chgs};
+    render(TRACK,p,cals,chgs);
+  }catch(err){
+    $("#stage").innerHTML='<p class="note err">Výpočet zlyhal: '+err.message+'</p>';
+  }
+};
+
+/* ---------- offline režim ---------- */
+if ("serviceWorker" in navigator && location.protocol.indexOf("http")===0){
+  window.addEventListener("load",function(){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  });
+}
+
+/* prekreslenie po otočení telefónu */
+var rt=null;
+window.addEventListener("resize",function(){
+  if(!LAST) return;
+  clearTimeout(rt);
+  rt=setTimeout(function(){ render(LAST.tr,LAST.p,LAST.cals,LAST.chgs); },250);
+});
+</script>
+</html>
