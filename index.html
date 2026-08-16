@@ -144,6 +144,18 @@
     font-size:16px;font-weight:700;color:var(--ink)}
   .version{margin:6px 0 0;font-size:13px;font-weight:600;color:var(--rule);letter-spacing:.04em}
   footer{margin-top:40px;padding-top:14px;border-top:2px solid var(--rule);font-size:14.5px;color:var(--ink-soft);max-width:74ch}
+  .export-bar{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 28px}
+  .export-btn{flex:1 1 180px;background:none;border:2px solid var(--ink);padding:13px 16px;cursor:pointer;
+    font-family:var(--font-map);text-transform:uppercase;letter-spacing:.1em;font-size:14px;font-weight:800;
+    color:var(--ink);min-height:50px}
+  .export-btn:hover{background:var(--ink);color:#fff}
+  @media print{
+    .legend,.export-bar,.sun,header .sub,header .eyebrow,.hint,.feedback{display:none!important}
+    figure{box-shadow:none!important;border:1px solid #999!important}
+    .stats{break-inside:avoid}
+    table{break-inside:avoid}
+    body{font-size:12px}
+  }
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -324,7 +336,7 @@
   už nerozlišuje jednotky a zvyšok kapacity závisí od teploty a veku článkov natoľko, že sa naň
   plánovať nedá.
   <p class="feedback">Spätná väzba: <a href="mailto:sklad1234@gmail.com">sklad1234@gmail.com</a></p>
-  <p class="version">Verzia 2.1.2.1 &nbsp;·&nbsp; 16. augusta 2026</p>
+  <p class="version">Verzia 2.1.2.4 &nbsp;·&nbsp; 16. augusta 2026</p>
 </footer>
 </div>
 
@@ -816,7 +828,84 @@ function render(tr,p,cals,chgsIn){
     +fmt(win/1000)+' km, teda tak, ako ho počíta zobrazovač na bicykli — v stúpaní klesá a na zjazde '
     +'rastie. Počíta sa po kritickú hranicu '+Math.round(dead)+' %, nie po nulu. Riadky pod rezervou '
     +Math.round(crit)+' % sú zvýraznené a v zátvorke je hodnota, ktorú v tom mieste ukáže zobrazovač. '
-    +'Ako ďaleko dôjdete po tejto trase hovorí bod kritickej hranice vyššie, nie tento stĺpec.</p>';
+    +'Ako ďaleko dôjdete po tejto trase hovorí bod kritickej hranice vyššie, nie tento stĺpec.</p>'
+    +'<div class="export-bar"><button type="button" class="export-btn" id="expHtml">⬇ Uložiť ako HTML</button>'
+    +'<button type="button" class="export-btn" id="expPdf">🖨 Tlačiť / Uložiť ako PDF</button></div>';
+  setupExport(tr,p,soc,zero,dead,C,total,notes,segTable,rows,win,crit,M);
+}
+
+/* ---------- export HTML / PDF ---------- */
+function setupExport(tr,p,soc,zero,dead,C,total,notes,segTable,rows,win,crit,M){
+  var btn=$("#expHtml"), btnP=$("#expPdf");
+  if(!btn||!btnP) return;
+
+  function buildHtml(){
+    var stageHtml=$("#stage").innerHTML
+      .replace(/<div class="export-bar">[\s\S]*?<\/div>/,"")
+      .replace(/var\(--ink\)/g,"#101A14")
+      .replace(/var\(--ink-soft\)/g,"#39473E")
+      .replace(/var\(--sheet-2\)/g,"#F8F9F4")
+      .replace(/var\(--rule\)/g,"#9BA595")
+      .replace(/var\(--crit\)/g,"#9C2418")
+      .replace(/var\(--crit-bg\)/g,"rgba(156,36,24,.13)")
+      .replace(/var\(--contour\)/g,"#8A7647")
+      .replace(/var\(--drain\)/g,"#9C2418")
+      .replace(/var\(--water\)/g,"#2A5F82")
+      .replace(/var\(--charge\)/g,"#1C5B37")
+      .replace(/var\(--font-data\)/g,"monospace")
+      .replace(/var\(--font-map\)/g,"sans-serif");
+    var now=new Date();
+    var ds=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+    var name=(tr.name||"trasa").replace(/[^a-zA-Z0-9áéíóúäöüčšžýľťňÁÉÍÓÚÄÖÜČŠŽÝĽŤŇ_ -]/g,"");
+    return {
+      html:'<!DOCTYPE html>\n<html lang="sk">\n<meta charset="utf-8">\n'
+        +'<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        +'<title>Dojazd e-biku – '+(tr.name||"výpočet")+' – '+ds+'</title>\n'
+        +'<style>\n'
+        +'*{box-sizing:border-box}body{margin:20px;font-family:system-ui,sans-serif;font-size:15px;color:#101A14;background:#fff}\n'
+        +'h1{font-size:22px;margin:0 0 4px}p.meta{color:#555;font-size:13px;margin:0 0 18px}\n'
+        +'svg{width:100%;height:auto;display:block;margin-bottom:18px}\n'
+        +'.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0;border:2px solid #101A14;margin-bottom:18px}\n'
+        +'.stat{padding:10px 12px;border-right:2px solid #9BA595;border-bottom:2px solid #9BA595}\n'
+        +'.stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#39473E;font-weight:700}\n'
+        +'.stat .v{font-family:monospace;font-size:22px;font-weight:700;margin-top:2px}\n'
+        +'.stat .v small{font-size:13px;color:#39473E}\n'
+        +'.stat.danger{background:rgba(156,36,24,.10)}.stat.danger .v,.stat.danger .k{color:#9C2418}\n'
+        +'.note{border-left:5px solid #8A7647;padding:4px 0 4px 12px;margin:0 0 12px;font-size:14px}\n'
+        +'.crit-note{border-left-color:#9C2418;background:rgba(156,36,24,.10);padding:8px 12px;color:#9C2418;font-weight:700}\n'
+        +'.err{border-left-color:#9C2418;color:#9C2418;font-weight:700}\n'
+        +'.tw{overflow-x:auto;margin-bottom:18px}\n'
+        +'table{width:100%;border-collapse:collapse;font-family:monospace;font-size:13px}\n'
+        +'caption{text-align:left;font-weight:700;font-size:13px;text-transform:uppercase;padding:8px 10px;background:#101A14;color:#fff}\n'
+        +'th,td{padding:7px 10px;border-bottom:1px solid #9BA595;text-align:right}\n'
+        +'th:first-child,td:first-child{text-align:left}\n'
+        +'th{font-size:12px;text-transform:uppercase;color:#101A14;font-family:sans-serif}\n'
+        +'tr.crit td{background:rgba(156,36,24,.10);color:#9C2418;font-weight:700}\n'
+        +'tr.dead td{background:rgba(156,36,24,.13);color:#9C2418;font-weight:700}\n'
+        +'figcaption{font-family:sans-serif;font-size:13px;font-weight:700;text-transform:uppercase;'
+        +'padding:8px 12px;background:#101A14;color:#fff;display:flex;justify-content:space-between}\n'
+        +'footer{margin-top:28px;padding-top:12px;border-top:2px solid #9BA595;font-size:12px;color:#555}\n'
+        +'</style>\n'
+        +'<h1>Dojazd e-biku — '+(tr.name||"výpočet")+'</h1>\n'
+        +'<p class="meta">Vygenerované: '+ds+' &nbsp;·&nbsp; Verzia 2.1.2.0</p>\n'
+        +stageHtml
+        +'<footer>Model počíta mechanickú prácu zo sklonu, valivého odporu, odporu vzduchu a zrýchlenia. '
+        +'Rekuperáciu neuvažuje. Kritická hodnota batérie: '+Math.round(dead)+' %. Verzia 2.1.2.0.</footer>\n'
+        +'</html>',
+      name:"dojazd-"+name+"-"+ds+".html"
+    };
+  }
+
+  btn.onclick=function(){
+    var r=buildHtml();
+    var blob=new Blob([r.html],{type:"text/html;charset=utf-8"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url; a.download=r.name; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+  };
+
+  btnP.onclick=function(){ window.print(); };
 }
 
 /* ---------- riadky ---------- */
